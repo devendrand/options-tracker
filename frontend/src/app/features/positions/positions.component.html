@@ -1,1 +1,109 @@
-<p>Positions placeholder</p>
+<div class="filter-bar">
+  <input
+    type="text"
+    data-testid="underlying-filter"
+    placeholder="Underlying"
+    (change)="onUnderlyingChange($event)"
+  />
+
+  <select data-testid="status-filter" (change)="onStatusChange($event)">
+    <option value="">All Statuses</option>
+    @for (s of statusOptions; track s) {
+      <option [value]="s">{{ s }}</option>
+    }
+  </select>
+
+  <button data-testid="reset-btn" (click)="resetFilters()">Reset</button>
+</div>
+
+@if (loading()) {
+  <div data-testid="loading-state" class="loading-state">
+    <p>Loading positions...</p>
+  </div>
+} @else if (error()) {
+  <div data-testid="error-state" class="error-state">
+    <p>{{ error() }}</p>
+    <button data-testid="retry-btn" (click)="loadPositions()">Retry</button>
+  </div>
+} @else if (positions().length === 0) {
+  <div data-testid="empty-state" class="empty-state">
+    <p>No positions found.</p>
+  </div>
+} @else {
+  <table data-testid="positions-table" class="positions-table">
+    <thead>
+      <tr>
+        <th>Underlying</th>
+        <th>Symbol</th>
+        <th>Type</th>
+        <th>Direction</th>
+        <th>Strike</th>
+        <th>Expiry</th>
+        <th>Status</th>
+        <th class="align-right">Realized P&amp;L</th>
+        <th>Covered Call</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (pos of positions(); track pos.id) {
+        <tr [attr.data-testid]="'position-row-' + pos.id">
+          <td>{{ pos.underlying }}</td>
+          <td>{{ pos.option_symbol }}</td>
+          <td>{{ pos.option_type }}</td>
+          <td>{{ pos.direction }}</td>
+          <td>${{ pos.strike }}</td>
+          <td>{{ pos.expiry }}</td>
+          <td>
+            <app-status-badge [status]="pos.status" />
+            @if (pos.status === 'PARTIALLY_CLOSED') {
+              <span data-testid="partial-badge" class="badge-partial">Partial</span>
+            }
+          </td>
+          <td
+            data-testid="pnl-cell"
+            class="align-right"
+            [class.positive]="pnlClass(pos.realized_pnl) === 'positive'"
+            [class.negative]="pnlClass(pos.realized_pnl) === 'negative'"
+          >
+            {{ pos.realized_pnl ?? '—' }}
+          </td>
+          <td>
+            @if (pos.is_covered_call) {
+              <span data-testid="covered-call-badge">Covered</span>
+            }
+          </td>
+          <td>
+            <button
+              [attr.data-testid]="'expand-btn-' + pos.id"
+              (click)="toggleDrawer(pos.id)"
+            >
+              {{ isExpanded(pos.id) ? 'Collapse' : 'Expand' }}
+            </button>
+          </td>
+        </tr>
+        @if (isExpanded(pos.id)) {
+          <tr [attr.data-testid]="'drawer-row-' + pos.id">
+            <td colspan="10">
+              <app-position-drawer [positionId]="pos.id" />
+            </td>
+          </tr>
+        }
+      }
+    </tbody>
+  </table>
+}
+
+@if (total() > limit()) {
+  <div data-testid="pagination-controls" class="pagination-controls">
+    <button data-testid="prev-btn" [disabled]="!hasPrev()" (click)="prevPage()">Previous</button>
+    <span data-testid="page-info">Page {{ currentPage() }} of {{ totalPages() }}</span>
+    <button data-testid="next-btn" [disabled]="!hasNext()" (click)="nextPage()">Next</button>
+    <select data-testid="limit-select" (change)="onLimitChange($event)">
+      <option value="50" [selected]="limit() === 50">50</option>
+      <option value="100" [selected]="limit() === 100">100</option>
+      <option value="200" [selected]="limit() === 200">200</option>
+      <option value="500" [selected]="limit() === 500">500</option>
+    </select>
+  </div>
+}

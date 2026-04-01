@@ -3,28 +3,37 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { PositionService } from './position.service';
 import { API_BASE_URL } from '../api.config';
-import { OptionsPosition, PositionQueryParams } from '../models/position.model';
-import { PaginatedResponse } from '../models/pagination.model';
+import {
+  OptionsPosition,
+  OptionsPositionDetail,
+  PositionListResponse,
+} from '../models/position.model';
 
-const mockPosition: OptionsPosition = {
+const mockOptionsPosition: OptionsPosition = {
   id: 'pos-1',
   underlying: 'AAPL',
-  option_type: 'CALL',
+  option_symbol: 'AAPL240119C00200000',
   strike: '200.00',
   expiry: '2026-03-15',
+  option_type: 'CALL',
+  direction: 'SHORT',
   status: 'CLOSED',
   is_covered_call: false,
   realized_pnl: '350.00',
-  legs: [],
-  created_at: '2026-03-01T10:00:00Z',
-  updated_at: '2026-03-15T10:00:00Z',
 };
 
-const mockPaginatedResponse: PaginatedResponse<OptionsPosition> = {
-  items: [mockPosition],
+const mockListResponse: PositionListResponse = {
   total: 1,
   offset: 0,
   limit: 100,
+  options_items: [mockOptionsPosition],
+  equity_items: [],
+};
+
+const mockDetail: OptionsPositionDetail = {
+  ...mockOptionsPosition,
+  legs: [],
+  total_realized_pnl: '350.00',
 };
 
 describe('PositionService', () => {
@@ -49,10 +58,10 @@ describe('PositionService', () => {
   });
 
   describe('getPositions()', () => {
-    it('should GET /api/v1/positions without params and return paginated response', (done) => {
+    it('should GET /api/v1/positions without params and return PositionListResponse', (done) => {
       service.getPositions().subscribe({
         next: (res) => {
-          expect(res).toEqual(mockPaginatedResponse);
+          expect(res).toEqual(mockListResponse);
           done();
         },
         error: done.fail,
@@ -60,20 +69,18 @@ describe('PositionService', () => {
 
       const req = controller.expectOne('/api/v1/positions');
       expect(req.request.method).toBe('GET');
-      req.flush(mockPaginatedResponse);
+      req.flush(mockListResponse);
     });
 
     it('should serialize underlying query param', (done) => {
-      const params: PositionQueryParams = { underlying: 'AAPL' };
-
-      service.getPositions(params).subscribe({
+      service.getPositions({ underlying: 'AAPL' }).subscribe({
         next: () => done(),
         error: done.fail,
       });
 
       const req = controller.expectOne((r) => r.url === '/api/v1/positions');
       expect(req.request.params.get('underlying')).toBe('AAPL');
-      req.flush(mockPaginatedResponse);
+      req.flush(mockListResponse);
     });
 
     it('should serialize status query param', (done) => {
@@ -84,18 +91,18 @@ describe('PositionService', () => {
 
       const req = controller.expectOne((r) => r.url === '/api/v1/positions');
       expect(req.request.params.get('status')).toBe('OPEN');
-      req.flush(mockPaginatedResponse);
+      req.flush(mockListResponse);
     });
 
-    it('should serialize option_type query param', (done) => {
-      service.getPositions({ option_type: 'PUT' }).subscribe({
+    it('should serialize asset_type query param', (done) => {
+      service.getPositions({ asset_type: 'options' }).subscribe({
         next: () => done(),
         error: done.fail,
       });
 
       const req = controller.expectOne((r) => r.url === '/api/v1/positions');
-      expect(req.request.params.get('option_type')).toBe('PUT');
-      req.flush(mockPaginatedResponse);
+      expect(req.request.params.get('asset_type')).toBe('options');
+      req.flush(mockListResponse);
     });
 
     it('should serialize offset and limit query params', (done) => {
@@ -107,7 +114,7 @@ describe('PositionService', () => {
       const req = controller.expectOne((r) => r.url === '/api/v1/positions');
       expect(req.request.params.get('offset')).toBe('0');
       expect(req.request.params.get('limit')).toBe('50');
-      req.flush(mockPaginatedResponse);
+      req.flush(mockListResponse);
     });
 
     it('should omit undefined params', (done) => {
@@ -119,15 +126,15 @@ describe('PositionService', () => {
       const req = controller.expectOne((r) => r.url === '/api/v1/positions');
       expect(req.request.params.has('underlying')).toBe(false);
       expect(req.request.params.get('limit')).toBe('25');
-      req.flush(mockPaginatedResponse);
+      req.flush(mockListResponse);
     });
   });
 
   describe('getPosition(id)', () => {
-    it('should GET /api/v1/positions/{id} and return a single position', (done) => {
+    it('should GET /api/v1/positions/{id} and return OptionsPositionDetail', (done) => {
       service.getPosition('pos-1').subscribe({
         next: (pos) => {
-          expect(pos).toEqual(mockPosition);
+          expect(pos).toEqual(mockDetail);
           done();
         },
         error: done.fail,
@@ -135,7 +142,7 @@ describe('PositionService', () => {
 
       const req = controller.expectOne('/api/v1/positions/pos-1');
       expect(req.request.method).toBe('GET');
-      req.flush(mockPosition);
+      req.flush(mockDetail);
     });
   });
 });

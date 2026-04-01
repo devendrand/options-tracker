@@ -1,0 +1,39 @@
+@if (loading()) {
+  <span data-testid="drawer-loading">Loading position details...</span>
+} @else if (error()) {
+  <div data-testid="drawer-error">
+    <p>{{ error() }}</p>
+    <button data-testid="drawer-retry-btn" (click)="loadDetail()">Retry</button>
+  </div>
+} @else if (detail(); as d) {
+  <div data-testid="drawer-content">
+    <p>
+      Total Realized P&amp;L:
+      <span data-testid="total-pnl">{{ d.total_realized_pnl ?? '—' }}</span>
+    </p>
+    <table data-testid="legs-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Role</th>
+          <th>Qty</th>
+          <th>Price</th>
+          <th>Amount</th>
+          <th>Commission</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (leg of d.legs; track leg.id) {
+          <tr [attr.data-testid]="'leg-row-' + leg.id">
+            <td>{{ leg.trade_date | date: 'mediumDate' }}</td>
+            <td>{{ leg.leg_role }}</td>
+            <td>{{ leg.quantity }}</td>
+            <td>{{ leg.price ?? '—' }}</td>
+            <td [class]="pnlClass(leg.amount)">{{ leg.amount }}</td>
+            <td>{{ leg.commission }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  </div>
+}

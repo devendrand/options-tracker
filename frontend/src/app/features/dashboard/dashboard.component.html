@@ -1,1 +1,60 @@
-<p>Dashboard placeholder</p>
+@if (!hasData()) {
+  <div data-testid="no-data-cta">
+    <p>No data yet. Upload your first E*TRADE CSV to get started.</p>
+    <a data-testid="no-data-upload-link" [routerLink]="['/upload']">Upload CSV</a>
+  </div>
+}
+
+<div data-testid="pnl-card">
+  <h2>Total Realized P&amp;L</h2>
+  @if (pnlLoading()) {
+    <span data-testid="pnl-loading">Loading...</span>
+  } @else if (pnlError()) {
+    <div data-testid="pnl-error">
+      <p>{{ pnlError() }}</p>
+      <button data-testid="pnl-retry-btn" (click)="loadPnl()">Retry</button>
+    </div>
+  } @else {
+    <span
+      data-testid="pnl-value"
+      [class.positive]="isPnlPositive()"
+      [class.negative]="isPnlNegative()"
+    >{{ totalPnl() }}</span>
+  }
+</div>
+
+<div data-testid="counts-card">
+  <h2>Positions</h2>
+  @if (countsLoading()) {
+    <span data-testid="counts-loading">Loading...</span>
+  } @else if (countsError()) {
+    <div data-testid="counts-error">
+      <p>{{ countsError() }}</p>
+      <button data-testid="counts-retry-btn" (click)="loadCounts()">Retry</button>
+    </div>
+  } @else {
+    <span data-testid="open-count">{{ openCount() }}</span>
+    <span data-testid="closed-count">{{ closedCount() }}</span>
+  }
+</div>
+
+<div data-testid="uploads-card">
+  <h2>Recent Uploads</h2>
+  @if (uploadsLoading()) {
+    <span data-testid="uploads-loading">Loading...</span>
+  } @else if (uploadsError()) {
+    <div data-testid="uploads-error">
+      <p>{{ uploadsError() }}</p>
+      <button data-testid="uploads-retry-btn" (click)="loadRecentUploads()">Retry</button>
+    </div>
+  } @else if (recentUploads().length === 0) {
+    <p data-testid="uploads-empty">No uploads yet.</p>
+  } @else {
+    @for (upload of recentUploads(); track upload.id) {
+      <a
+        [attr.data-testid]="'upload-link-' + upload.id"
+        [routerLink]="['/uploads', upload.id]"
+      >{{ upload.filename }}</a>
+    }
+  }
+</div>
