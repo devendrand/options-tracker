@@ -1,1 +1,95 @@
-<p>Upload History placeholder</p>
+@if (loading()) {
+  <div data-testid="loading-state" class="loading-state">
+    <p>Loading uploads...</p>
+  </div>
+} @else if (error()) {
+  <div data-testid="error-state" class="error-state">
+    <p>{{ error() }}</p>
+    <button data-testid="retry-btn" (click)="loadUploads()">Retry</button>
+  </div>
+} @else if (uploads().length === 0) {
+  <div data-testid="empty-state" class="empty-state">
+    <p>No uploads found. Upload a CSV file to get started.</p>
+  </div>
+} @else {
+  <table data-testid="uploads-table" class="uploads-table">
+    <thead>
+      <tr>
+        <th>Filename</th>
+        <th>Broker</th>
+        <th>Status</th>
+        <th class="align-right">Rows</th>
+        <th class="align-right">Options</th>
+        <th class="align-right">Duplicates</th>
+        <th class="align-right">Possible Dupes</th>
+        <th class="align-right">Parse Errors</th>
+        <th class="align-right">Transfers</th>
+        <th>Uploaded</th>
+        <th>Actions</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (upload of uploads(); track upload.id) {
+        <tr [attr.data-testid]="'upload-row-' + upload.id">
+          <td>{{ upload.filename }}</td>
+          <td>{{ upload.broker }}</td>
+          <td><app-status-badge [status]="upload.status" /></td>
+          <td class="align-right">{{ upload.row_count ?? '—' }}</td>
+          <td class="align-right">{{ upload.options_count ?? '—' }}</td>
+          <td class="align-right">{{ upload.duplicate_count ?? '—' }}</td>
+          <td class="align-right">
+            @if ((upload.possible_duplicate_count ?? 0) > 0) {
+              <a
+                [attr.data-testid]="'possible-duplicate-link-' + upload.id"
+                data-testid="possible-duplicate-link"
+                [routerLink]="['/transactions']"
+              >{{ upload.possible_duplicate_count }}</a>
+            } @else {
+              {{ upload.possible_duplicate_count ?? '—' }}
+            }
+          </td>
+          <td class="align-right">{{ upload.parse_error_count ?? '—' }}</td>
+          <td class="align-right">{{ upload.internal_transfer_count ?? '—' }}</td>
+          <td>{{ upload.uploaded_at | relativeDate }}</td>
+          <td>
+            <button
+              [attr.data-testid]="'delete-btn-' + upload.id"
+              (click)="confirmDelete(upload.id)"
+            >
+              Delete
+            </button>
+            @if (deletingId() === upload.id) {
+              <div
+                [attr.data-testid]="'confirm-panel-' + upload.id"
+                data-testid="delete-confirm-dialog"
+                class="confirm-panel"
+              >
+                <p data-testid="delete-warning-text" class="warning">
+                  Warning: Deleting this upload may re-surface previously hidden POSSIBLE_DUPLICATE
+                  transactions for review.
+                </p>
+                @if (deleteError()) {
+                  <p data-testid="delete-error-text" class="error">{{ deleteError() }}</p>
+                }
+                <button
+                  [attr.data-testid]="'confirm-delete-btn-' + upload.id"
+                  data-testid="confirm-delete-btn"
+                  (click)="executeDelete()"
+                >
+                  Confirm Delete
+                </button>
+                <button
+                  [attr.data-testid]="'cancel-delete-btn-' + upload.id"
+                  data-testid="cancel-delete-btn"
+                  (click)="cancelDelete()"
+                >
+                  Cancel
+                </button>
+              </div>
+            }
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

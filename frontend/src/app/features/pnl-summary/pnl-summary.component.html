@@ -1,1 +1,72 @@
-<p>P&amp;L Summary placeholder</p>
+<div class="pnl-controls">
+  <div data-testid="period-toggle" class="period-toggle">
+    <label>
+      <input
+        type="radio"
+        name="period"
+        value="year"
+        [checked]="period() === 'year'"
+        (change)="setPeriod('year')"
+        data-testid="period-year"
+      />
+      Year
+    </label>
+    <label>
+      <input
+        type="radio"
+        name="period"
+        value="month"
+        [checked]="period() === 'month'"
+        (change)="setPeriod('month')"
+        data-testid="period-month"
+      />
+      Month
+    </label>
+  </div>
+
+  <input
+    type="text"
+    data-testid="underlying-filter"
+    placeholder="Filter by underlying (e.g. NVDA)"
+    (input)="onUnderlyingChange($event)"
+  />
+</div>
+
+@if (loading()) {
+  <div data-testid="loading-state" class="loading-state">
+    <p>Loading P&L summary...</p>
+  </div>
+} @else if (error()) {
+  <div data-testid="error-state" class="error-state">
+    <p>{{ error() }}</p>
+    <button data-testid="retry-btn" (click)="loadSummary()">Retry</button>
+  </div>
+} @else if ((summary()?.items?.length ?? 0) === 0) {
+  <div data-testid="empty-state" class="empty-state">
+    <p>No P&L data found for the selected period.</p>
+  </div>
+} @else {
+  <div class="total-pnl" data-testid="total-pnl" [class]="pnlClass(totalPnl())">
+    Total P&L: {{ totalPnl() }}
+  </div>
+  <table data-testid="pnl-table" class="pnl-table">
+    <thead>
+      <tr>
+        <th>Period</th>
+        <th class="align-right">Options P&L</th>
+        <th class="align-right">Equity P&L</th>
+        <th class="align-right">Total P&L</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (entry of summary()!.items; track entry.period_label) {
+        <tr data-testid="pnl-row">
+          <td>{{ formatPeriodLabel(entry.period_label, period()) }}</td>
+          <td class="align-right" [class]="pnlClass(entry.options_pnl)">{{ entry.options_pnl }}</td>
+          <td class="align-right" [class]="pnlClass(entry.equity_pnl)">{{ entry.equity_pnl }}</td>
+          <td class="align-right" [class]="pnlClass(entry.total_pnl)">{{ entry.total_pnl }}</td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}

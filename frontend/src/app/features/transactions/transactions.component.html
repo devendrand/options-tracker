@@ -1,1 +1,94 @@
-<p>Transactions placeholder</p>
+<div class="filter-bar">
+  <select multiple data-testid="category-filter" (change)="onCategoryMultiChange($event)">
+    @for (cat of categories; track cat) {
+      <option [value]="cat">{{ cat | categoryLabel }}</option>
+    }
+  </select>
+
+  <select multiple data-testid="status-filter" (change)="onStatusMultiChange($event)">
+    @for (s of dedupStatuses; track s) {
+      <option [value]="s">{{ s }}</option>
+    }
+  </select>
+
+  <input
+    type="text"
+    data-testid="symbol-filter"
+    placeholder="Symbol"
+    (change)="onSymbolChange($event)"
+  />
+
+  <input type="date" data-testid="start-date-filter" (change)="onStartDateChange($event)" />
+
+  <input type="date" data-testid="end-date-filter" (change)="onEndDateChange($event)" />
+
+  <button data-testid="reset-btn" (click)="resetFilters()">Reset</button>
+</div>
+
+@if (loading()) {
+  <div data-testid="loading-state" class="loading-state">
+    <p>Loading transactions...</p>
+  </div>
+} @else if (error()) {
+  <div data-testid="error-state" class="error-state">
+    <p>{{ error() }}</p>
+    <button data-testid="retry-btn" (click)="loadTransactions()">Retry</button>
+  </div>
+} @else if (transactions().length === 0) {
+  <div data-testid="empty-state" class="empty-state">
+    <p>No transactions found.</p>
+  </div>
+} @else {
+  <table data-testid="transactions-table" class="transactions-table">
+    <thead>
+      <tr>
+        <th>Trade Date</th>
+        <th>Activity Type</th>
+        <th>Symbol</th>
+        <th>Description</th>
+        <th>Category</th>
+        <th class="align-right">Quantity</th>
+        <th class="align-right">Price</th>
+        <th class="align-right">Amount</th>
+        <th class="align-right">Commission</th>
+        <th>Status</th>
+        <th>Upload</th>
+      </tr>
+    </thead>
+    <tbody>
+      @for (tx of transactions(); track tx.id) {
+        <tr data-testid="transaction-row" [class]="rowClass(tx.dedup_status)">
+          <td>{{ tx.trade_date | relativeDate }}</td>
+          <td>{{ tx.activity_type }}</td>
+          <td>{{ tx.symbol ?? '—' }}</td>
+          <td class="description-cell">{{ tx.description }}</td>
+          <td>{{ tx.category | categoryLabel }}</td>
+          <td class="align-right">{{ tx.quantity ?? '—' }}</td>
+          <td class="align-right">{{ tx.price ? '$' + tx.price : '—' }}</td>
+          <td class="align-right" [class.negative]="tx.amount.startsWith('-')">{{ tx.amount }}</td>
+          <td class="align-right">{{ tx.commission }}</td>
+          <td><app-status-badge [status]="tx.dedup_status" /></td>
+          <td>
+            <a data-testid="upload-link" [routerLink]="['/uploads', tx.upload_id]">{{
+              tx.upload_id | slice: 0 : 8
+            }}</a>
+          </td>
+        </tr>
+      }
+    </tbody>
+  </table>
+}
+
+@if (total() > limit()) {
+  <div data-testid="pagination-controls" class="pagination-controls">
+    <button data-testid="prev-btn" [disabled]="!hasPrev()" (click)="prevPage()">Previous</button>
+    <span data-testid="page-info">Page {{ currentPage() }} of {{ totalPages() }}</span>
+    <button data-testid="next-btn" [disabled]="!hasNext()" (click)="nextPage()">Next</button>
+    <select data-testid="limit-select" (change)="onLimitChange($event)">
+      <option value="50" [selected]="limit() === 50">50</option>
+      <option value="100" [selected]="limit() === 100">100</option>
+      <option value="200" [selected]="limit() === 200">200</option>
+      <option value="500" [selected]="limit() === 500">500</option>
+    </select>
+  </div>
+}

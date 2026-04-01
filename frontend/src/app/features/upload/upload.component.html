@@ -1,1 +1,33 @@
-<p>Upload placeholder</p>
+@if (isUploading) {
+  <div data-testid="loading-state" class="upload-loading">
+    <p>Uploading...</p>
+  </div>
+} @else if (uploadResult) {
+  <div data-testid="result-state" class="upload-result">
+    <h3>Upload Complete</h3>
+    <p>File: {{ uploadResult.filename }}</p>
+    <p>Rows: {{ uploadResult.row_count }}</p>
+    <p>Options: {{ uploadResult.options_count }}</p>
+    <p>Duplicates: {{ uploadResult.duplicate_count }}</p>
+    <p>Errors: {{ uploadResult.parse_error_count }}</p>
+    <button data-testid="upload-another-btn" (click)="reset()">Upload Another</button>
+  </div>
+} @else if (errorMessage) {
+  <div data-testid="error-state" class="upload-error">
+    <p>{{ errorMessage }}</p>
+    <button data-testid="try-again-btn" (click)="reset()">Try Again</button>
+  </div>
+} @else {
+  <div
+    data-testid="upload-zone"
+    class="upload-zone"
+    (drop)="onDrop($event)"
+    (dragover)="onDragOver($event)"
+  >
+    <input type="file" accept=".csv" (change)="onFileSelected($event)" />
+    <p>Drag &amp; drop a CSV file or click to browse</p>
+  </div>
+  <button data-testid="upload-btn" [disabled]="!selectedFile || isUploading" (click)="upload()">
+    Upload
+  </button>
+}
