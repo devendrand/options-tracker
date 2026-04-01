@@ -1,0 +1,38 @@
+# Environment — never commit real credentials
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+htmlcov/
+.coverage
+coverage.xml
+
+# Node / Angular
+node_modules/
+frontend/dist/
+frontend/.angular/
+*.tsbuildinfo
+
+# Docker
+.docker/
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo

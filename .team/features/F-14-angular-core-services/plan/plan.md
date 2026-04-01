@@ -1,15 +1,15 @@
-# F9: Frontend Core — Angular Scaffold, Routing, ApiService, Shared Components
+# F-03 / F-14: Frontend Project Scaffold + Angular Core Services
 
-**Feature:** F9  
+**Features:** F-03 (Frontend Project Scaffold), F-14 (Angular Core Services + HTTP Client Setup)  
 **Owner:** angular-tdd-frontend  
-**Status:** Draft (awaiting TechLead approval)  
-**Depends on:** F1 (Docker/CI scaffolding complete, project root structure in place)
+**Status:** Approved with conditions (see review.md)  
+**Depends on:** F-01 (Docker/CI scaffolding complete, project root structure in place)
 
 ---
 
 ## 1. Objectives
 
-Bootstrap the Angular workspace that all feature modules (F10–F14) build on:
+Bootstrap the Angular workspace that all feature modules (F-15–F-18) build on:
 
 - Angular latest LTS workspace, strict TypeScript
 - Jest + jest-preset-angular at 100% coverage gate (replacing Karma)
@@ -49,7 +49,7 @@ Bootstrap the Angular workspace that all feature modules (F10–F14) build on:
 |---|---|
 | `frontend/src/main.ts` | `bootstrapApplication(AppComponent, appConfig)` |
 | `frontend/src/app/app.config.ts` | `provideRouter`, `provideHttpClient(withInterceptors([...]))`, `provideAnimations` |
-| `frontend/src/app/app.routes.ts` | Lazy-loaded routes for all 5 feature areas |
+| `frontend/src/app/app.routes.ts` | Lazy-loaded routes for all 6 feature areas |
 | `frontend/src/app/app.component.ts` | Root shell (nav + `<router-outlet>`) |
 | `frontend/src/app/app.component.html` | Navigation bar + `<router-outlet>` |
 | `frontend/src/app/app.component.spec.ts` | Unit tests |
@@ -91,6 +91,7 @@ Each stub has one component file + one spec with a single "creates" smoke test:
 | Transactions | `/transactions` | `TransactionsComponent` |
 | Positions | `/positions` | `PositionsComponent` |
 | Upload History | `/uploads` | `UploadHistoryComponent` |
+| P&L Summary | `/pnl-summary` | `PnlSummaryComponent` |
 
 #### Docker
 | File | Purpose |
@@ -135,7 +136,7 @@ export class ApiService {
 }
 ```
 
-- `postFormData` needed for F10 (multipart CSV upload via `POST /api/v1/uploads`).
+- `postFormData` needed for F-15 (multipart CSV upload via `POST /api/v1/uploads`).
 - No error handling in `ApiService` itself — that is the `ErrorInterceptor`'s responsibility.
 - Unit tests use `HttpClientTestingModule` + `HttpTestingController`.
 
@@ -165,6 +166,7 @@ export class ApiService {
 /transactions         → lazy TransactionsComponent
 /positions            → lazy PositionsComponent
 /uploads              → lazy UploadHistoryComponent
+/pnl-summary          → lazy PnlSummaryComponent
 **                    → redirectTo: '/dashboard'
 ```
 
@@ -186,6 +188,7 @@ export class ApiService {
 ### StatusBadgeComponent
 - `@Input() status!: string`
 - Maps status strings to CSS classes: `open` (blue), `closed` (green), `duplicate` (amber), `parse_error` (red), etc.
+- Covers all values: `OPEN`, `CLOSED`, `PARTIALLY_CLOSED`, `DUPLICATE`, `POSSIBLE_DUPLICATE`, `PARSE_ERROR`, `ACTIVE`
 - Standalone, OnPush
 
 ### CategoryLabelPipe
@@ -195,7 +198,9 @@ export class ApiService {
 
 ### RelativeDatePipe
 - Transform: ISO date string → `MMM d, yyyy` (e.g. `'Mar 15, 2026'`)
+- Uses Angular `DatePipe` with `'UTC'` timezone parameter to prevent ±1 day shift from browser locale
 - Pure pipe
+- Test must include: `'2026-03-15'` → `'Mar 15, 2026'` regardless of browser timezone
 
 ---
 
@@ -281,23 +286,23 @@ jobs:
 
 Tests are written **before** implementation in this exact order:
 
-1. **`LoadingService`** — `isLoading$` starts false; increments to true; back to false after decrement
+1. **`LoadingService`** — `isLoading$` starts false; increments to true; back to false after decrement; concurrent requests scenario (2 in-flight → both must complete before returns to false)
 2. **`LoadingInterceptor`** — increments on request, decrements on complete, decrements on error
 3. **`ErrorInterceptor`** — 400/404/422/500 → `ApiError`; network error (status=0) → `ApiError`; extracts FastAPI `detail` field
 4. **`ApiService`** — `get` correct URL + params; `post` correct URL + body; `postFormData` correct multipart; `delete` correct URL
 5. **`LoadingSpinnerComponent`** — renders message; custom message; spinner element present
 6. **`ErrorAlertComponent`** — hidden when null; shows message; dismiss click emits event
-7. **`StatusBadgeComponent`** — correct CSS class per status string
+7. **`StatusBadgeComponent`** — correct CSS class per status string (all 7 statuses)
 8. **`CategoryLabelPipe`** — each known category value → expected label; unknown → passthrough
-9. **`RelativeDatePipe`** — ISO string → formatted date
-10. **`AppComponent`** — `<router-outlet>` present; nav links for all 5 routes
-11. **Feature stub specs** — each creates without error (one test per stub)
+9. **`RelativeDatePipe`** — `'2026-03-15'` → `'Mar 15, 2026'` (UTC timezone, not local)
+10. **`AppComponent`** — `<router-outlet>` present; nav links for all 6 routes
+11. **Feature stub specs** — each creates without error (one test per stub, 6 stubs total)
 
 ---
 
 ## 11. Quality Gates
 
-All must pass before F9 is declared complete:
+All must pass before F-14 is declared complete:
 
 ```bash
 cd frontend
@@ -320,7 +325,7 @@ npx ng build --configuration production  # Production build succeeds
 7. **TDD: `LoadingSpinnerComponent` → `ErrorAlertComponent` → `StatusBadgeComponent`**
 8. **TDD: `CategoryLabelPipe` → `RelativeDatePipe`**
 9. **TDD: `AppComponent` shell + routing**
-10. Feature stub components (each with smoke test)
+10. Feature stub components (each with smoke test) — 6 stubs including `/pnl-summary`
 11. `Dockerfile` + `nginx.conf`
 12. `frontend-ci.yml`
 13. Full quality gate pass
@@ -329,6 +334,6 @@ npx ng build --configuration production  # Production build succeeds
 
 ## 13. Dependencies / Blockers
 
-- **F1 must be complete** before implementation — Docker Compose root structure and `ng new` scaffold must exist
-- No backend API dependency for F9 — `ApiService` tested with mocks only
-- F10–F14 all depend on F9 completing first
+- **F-01 must be complete** before implementation — Docker Compose root structure and `ng new` scaffold must exist
+- No backend API dependency for F-14 — `ApiService` tested with mocks only
+- F-15 through F-18 all depend on F-14 completing first
