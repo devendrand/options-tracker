@@ -29,97 +29,35 @@ def upgrade() -> None:
     """Create all tables, enums, and indexes."""
 
     # ------------------------------------------------------------------
-    # PostgreSQL ENUM types  (create_type=False → we manage DDL explicitly)
+    # PostgreSQL ENUM types — use raw DDL to avoid asyncpg checkfirst bug
     # ------------------------------------------------------------------
-    postgresql.ENUM(
-        "ACTIVE",
-        "SOFT_DELETED",
-        name="upload_status",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "ACTIVE",
-        "DUPLICATE",
-        "POSSIBLE_DUPLICATE",
-        "PARSE_ERROR",
-        name="raw_transaction_status",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "ACTIVE",
-        "SOFT_DELETED",
-        name="transaction_status",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "OPTIONS_SELL_TO_OPEN",
-        "OPTIONS_BUY_TO_OPEN",
-        "OPTIONS_BUY_TO_CLOSE",
-        "OPTIONS_SELL_TO_CLOSE",
-        "OPTIONS_EXPIRED",
-        "OPTIONS_ASSIGNED",
-        "OPTIONS_EXERCISED",
-        "EQUITY_BUY",
-        "EQUITY_SELL",
-        "DIVIDEND",
-        "TRANSFER",
-        "INTEREST",
-        "FEE",
-        "JOURNAL",
-        "OTHER",
-        name="transaction_category",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "CALL",
-        "PUT",
-        name="option_type",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "LONG",
-        "SHORT",
-        name="position_direction",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "OPEN",
-        "PARTIALLY_CLOSED",
-        "CLOSED",
-        "EXPIRED",
-        "ASSIGNED",
-        "EXERCISED",
-        name="options_position_status",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "OPEN",
-        "CLOSE",
-        name="leg_role",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "PURCHASE",
-        "ASSIGNMENT",
-        "EXERCISE",
-        name="equity_position_source",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
-
-    postgresql.ENUM(
-        "OPEN",
-        "CLOSED",
-        name="equity_position_status",
-        create_type=False,
-    ).create(op.get_bind(), checkfirst=True)
+    enum_defs = [
+        ("upload_status", ["ACTIVE", "SOFT_DELETED"]),
+        ("raw_transaction_status", ["ACTIVE", "DUPLICATE", "POSSIBLE_DUPLICATE", "PARSE_ERROR"]),
+        ("transaction_status", ["ACTIVE", "SOFT_DELETED"]),
+        ("transaction_category", [
+            "OPTIONS_SELL_TO_OPEN", "OPTIONS_BUY_TO_OPEN",
+            "OPTIONS_BUY_TO_CLOSE", "OPTIONS_SELL_TO_CLOSE",
+            "OPTIONS_EXPIRED", "OPTIONS_ASSIGNED", "OPTIONS_EXERCISED",
+            "EQUITY_BUY", "EQUITY_SELL", "DIVIDEND", "TRANSFER",
+            "INTEREST", "FEE", "JOURNAL", "OTHER",
+        ]),
+        ("option_type", ["CALL", "PUT"]),
+        ("position_direction", ["LONG", "SHORT"]),
+        ("options_position_status", [
+            "OPEN", "PARTIALLY_CLOSED", "CLOSED",
+            "EXPIRED", "ASSIGNED", "EXERCISED",
+        ]),
+        ("leg_role", ["OPEN", "CLOSE"]),
+        ("equity_position_source", ["PURCHASE", "ASSIGNMENT", "EXERCISE"]),
+        ("equity_position_status", ["OPEN", "CLOSED"]),
+    ]
+    for name, values in enum_defs:
+        vals = ", ".join(f"'{v}'" for v in values)
+        op.execute(sa.text(
+            f"DO $$ BEGIN CREATE TYPE {name} AS ENUM ({vals}); "
+            f"EXCEPTION WHEN duplicate_object THEN NULL; END $$;"
+        ))
 
     # ------------------------------------------------------------------
     # 1. uploads
@@ -143,7 +81,7 @@ def upgrade() -> None:
         sa.Column("internal_transfer_count", sa.Integer(), nullable=False, server_default="0"),
         sa.Column(
             "status",
-            sa.Enum("ACTIVE", "SOFT_DELETED", name="upload_status", create_type=False),
+            postgresql.ENUM("ACTIVE", "SOFT_DELETED", name="upload_status", create_type=False),
             nullable=False,
             server_default="ACTIVE",
         ),
@@ -162,7 +100,7 @@ def upgrade() -> None:
         sa.Column("is_internal_transfer", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column(
             "status",
-            sa.Enum(
+            postgresql.ENUM(
                 "ACTIVE",
                 "DUPLICATE",
                 "POSSIBLE_DUPLICATE",
@@ -197,7 +135,7 @@ def upgrade() -> None:
         sa.Column("expiry", sa.Date(), nullable=True),
         sa.Column(
             "option_type",
-            sa.Enum("CALL", "PUT", name="option_type", create_type=False),
+            postgresql.ENUM("CALL", "PUT", name="option_type", create_type=False),
             nullable=True,
         ),
         sa.Column("action", sa.String(50), nullable=False),
@@ -207,7 +145,7 @@ def upgrade() -> None:
         sa.Column("amount", sa.Numeric(12, 4), nullable=False),
         sa.Column(
             "category",
-            sa.Enum(
+            postgresql.ENUM(
                 "OPTIONS_SELL_TO_OPEN",
                 "OPTIONS_BUY_TO_OPEN",
                 "OPTIONS_BUY_TO_CLOSE",
@@ -230,7 +168,7 @@ def upgrade() -> None:
         ),
         sa.Column(
             "status",
-            sa.Enum("ACTIVE", "SOFT_DELETED", name="transaction_status", create_type=False),
+            postgresql.ENUM("ACTIVE", "SOFT_DELETED", name="transaction_status", create_type=False),
             nullable=False,
             server_default="ACTIVE",
         ),
@@ -264,17 +202,17 @@ def upgrade() -> None:
         sa.Column("expiry", sa.Date(), nullable=False),
         sa.Column(
             "option_type",
-            sa.Enum("CALL", "PUT", name="option_type", create_type=False),
+            postgresql.ENUM("CALL", "PUT", name="option_type", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "direction",
-            sa.Enum("LONG", "SHORT", name="position_direction", create_type=False),
+            postgresql.ENUM("LONG", "SHORT", name="position_direction", create_type=False),
             nullable=False,
         ),
         sa.Column(
             "status",
-            sa.Enum(
+            postgresql.ENUM(
                 "OPEN",
                 "PARTIALLY_CLOSED",
                 "CLOSED",
@@ -320,7 +258,7 @@ def upgrade() -> None:
         sa.Column("transaction_id", sa.UUID(), nullable=False),
         sa.Column(
             "leg_role",
-            sa.Enum("OPEN", "CLOSE", name="leg_role", create_type=False),
+            postgresql.ENUM("OPEN", "CLOSE", name="leg_role", create_type=False),
             nullable=False,
         ),
         sa.Column("quantity", sa.Numeric(15, 5), nullable=False),
@@ -358,7 +296,7 @@ def upgrade() -> None:
         sa.Column("cost_basis_per_share", sa.Numeric(12, 4), nullable=False),
         sa.Column(
             "source",
-            sa.Enum(
+            postgresql.ENUM(
                 "PURCHASE",
                 "ASSIGNMENT",
                 "EXERCISE",
@@ -370,7 +308,7 @@ def upgrade() -> None:
         sa.Column("assigned_position_id", sa.UUID(), nullable=True),
         sa.Column(
             "status",
-            sa.Enum("OPEN", "CLOSED", name="equity_position_status", create_type=False),
+            postgresql.ENUM("OPEN", "CLOSED", name="equity_position_status", create_type=False),
             nullable=False,
             server_default="OPEN",
         ),
