@@ -5,6 +5,7 @@ import { UploadService } from '../../core/services/upload.service';
 @Component({
   selector: 'app-upload',
   templateUrl: './upload.component.html',
+  styleUrl: './upload.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
 })
 export class UploadComponent {

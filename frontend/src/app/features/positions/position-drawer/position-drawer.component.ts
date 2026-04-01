@@ -13,6 +13,7 @@ import { PositionService } from '@core/services/position.service';
 @Component({
   selector: 'app-position-drawer',
   templateUrl: './position-drawer.component.html',
+  styleUrl: './position-drawer.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [DatePipe],
 })

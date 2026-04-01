@@ -5,11 +5,28 @@
 } @else if (uploadResult) {
   <div data-testid="result-state" class="upload-result">
     <h3>Upload Complete</h3>
-    <p>File: {{ uploadResult.filename }}</p>
-    <p>Rows: {{ uploadResult.row_count }}</p>
-    <p>Options: {{ uploadResult.options_count }}</p>
-    <p>Duplicates: {{ uploadResult.duplicate_count }}</p>
-    <p>Errors: {{ uploadResult.parse_error_count }}</p>
+    <div class="result-grid">
+      <div class="result-stat">
+        <span class="result-stat__label">File</span>
+        <span class="result-stat__value">{{ uploadResult.filename }}</span>
+      </div>
+      <div class="result-stat">
+        <span class="result-stat__label">Rows</span>
+        <span class="result-stat__value">{{ uploadResult.row_count }}</span>
+      </div>
+      <div class="result-stat">
+        <span class="result-stat__label">Options</span>
+        <span class="result-stat__value">{{ uploadResult.options_count }}</span>
+      </div>
+      <div class="result-stat">
+        <span class="result-stat__label">Duplicates</span>
+        <span class="result-stat__value">{{ uploadResult.duplicate_count }}</span>
+      </div>
+      <div class="result-stat">
+        <span class="result-stat__label">Errors</span>
+        <span class="result-stat__value">{{ uploadResult.parse_error_count }}</span>
+      </div>
+    </div>
     <button data-testid="upload-another-btn" (click)="reset()">Upload Another</button>
   </div>
 } @else if (errorMessage) {
@@ -27,7 +44,7 @@
     <input type="file" accept=".csv" (change)="onFileSelected($event)" />
     <p>Drag &amp; drop a CSV file or click to browse</p>
   </div>
-  <button data-testid="upload-btn" [disabled]="!selectedFile || isUploading" (click)="upload()">
+  <button data-testid="upload-btn" class="upload-btn" [disabled]="!selectedFile || isUploading" (click)="upload()">
     Upload
   </button>
 }

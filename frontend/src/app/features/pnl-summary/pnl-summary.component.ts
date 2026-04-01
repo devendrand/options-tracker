@@ -12,6 +12,7 @@ import { PnlService } from '@core/services/pnl.service';
 @Component({
   selector: 'app-pnl-summary',
   templateUrl: './pnl-summary.component.html',
+  styleUrl: './pnl-summary.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [],
 })

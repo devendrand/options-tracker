@@ -27,6 +27,7 @@ export const POSITION_STATUSES: OptionsPositionStatus[] = [
 @Component({
   selector: 'app-positions',
   templateUrl: './positions.component.html',
+  styleUrl: './positions.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [StatusBadgeComponent, PositionDrawerComponent],
 })

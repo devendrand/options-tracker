@@ -1,0 +1,104 @@
+$border: #e2e8f0;
+$text-muted: #64748b;
+$text-main: #1e293b;
+$positive: #0d9488;
+$negative: #dc2626;
+
+:host {
+  display: block;
+}
+
+.total-pnl-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+  font-size: 13px;
+  color: $text-muted;
+
+  span[data-testid='total-pnl'] {
+    font-weight: 700;
+    font-size: 15px;
+    color: $text-main;
+  }
+}
+
+table[data-testid='legs-table'] {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  border: 1px solid $border;
+  border-radius: 6px;
+  overflow: hidden;
+
+  thead {
+    background: #f1f5f9;
+
+    th {
+      padding: 7px 10px;
+      text-align: left;
+      font-size: 10px;
+      font-weight: 600;
+      color: $text-muted;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid $border;
+    }
+  }
+
+  tbody {
+    tr {
+      border-bottom: 1px solid $border;
+
+      &:last-child {
+        border-bottom: none;
+      }
+
+      &:nth-child(even) {
+        background: #fafafa;
+      }
+    }
+
+    td {
+      padding: 7px 10px;
+      color: $text-main;
+
+      &.positive {
+        color: $positive;
+        font-weight: 600;
+      }
+
+      &.negative {
+        color: $negative;
+        font-weight: 600;
+      }
+    }
+  }
+}
+
+span[data-testid='drawer-loading'] {
+  color: $text-muted;
+  font-size: 13px;
+}
+
+div[data-testid='drawer-error'] {
+  p {
+    color: $negative;
+    font-size: 13px;
+    margin-bottom: 8px;
+  }
+
+  button {
+    padding: 4px 10px;
+    border: 1px solid $border;
+    border-radius: 4px;
+    background: #ffffff;
+    color: $text-muted;
+    font-size: 12px;
+    cursor: pointer;
+
+    &:hover {
+      background: #f1f5f9;
+    }
+  }
+}

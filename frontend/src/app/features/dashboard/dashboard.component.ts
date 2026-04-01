@@ -17,6 +17,7 @@ import { Upload } from '@core/models/upload.model';
 @Component({
   selector: 'app-dashboard',
   templateUrl: './dashboard.component.html',
+  styleUrl: './dashboard.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink],
 })

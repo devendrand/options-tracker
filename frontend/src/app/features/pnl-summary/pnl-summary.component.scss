@@ -1,0 +1,191 @@
+$border: #e2e8f0;
+$text-muted: #64748b;
+$text-main: #1e293b;
+$positive: #0d9488;
+$negative: #dc2626;
+
+:host {
+  display: block;
+}
+
+.pnl-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  padding: 12px 16px;
+  background: #ffffff;
+  border: 1px solid $border;
+  border-radius: 8px;
+  margin-bottom: 16px;
+
+  input[type='text'] {
+    padding: 6px 10px;
+    border: 1px solid $border;
+    border-radius: 4px;
+    font-size: 13px;
+    color: $text-main;
+    background: #ffffff;
+    outline: none;
+    min-width: 220px;
+    font-family: inherit;
+
+    &:focus {
+      border-color: #1a73e8;
+    }
+  }
+}
+
+.period-toggle {
+  display: flex;
+  gap: 2px;
+  background: #f1f5f9;
+  border-radius: 6px;
+  padding: 3px;
+
+  label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 14px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 13px;
+    font-weight: 500;
+    color: $text-muted;
+    transition: background 0.15s, color 0.15s;
+
+    &:has(input:checked) {
+      background: #ffffff;
+      color: $text-main;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    input[type='radio'] {
+      display: none;
+    }
+  }
+}
+
+.loading-state,
+.error-state,
+.empty-state {
+  padding: 32px;
+  text-align: center;
+  background: #ffffff;
+  border: 1px solid $border;
+  border-radius: 8px;
+
+  p {
+    color: $text-muted;
+    margin-bottom: 12px;
+  }
+
+  button {
+    padding: 6px 14px;
+    border: 1px solid $border;
+    border-radius: 4px;
+    background: #ffffff;
+    color: $text-muted;
+    font-size: 13px;
+    cursor: pointer;
+
+    &:hover {
+      background: #f1f5f9;
+    }
+  }
+}
+
+.error-state p {
+  color: $negative;
+}
+
+.total-pnl {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #ffffff;
+  border: 1px solid $border;
+  border-radius: 8px;
+  font-size: 20px;
+  font-weight: 700;
+  color: $text-main;
+  margin-bottom: 16px;
+
+  &.positive {
+    color: $positive;
+    background: #f0fdfa;
+    border-color: #99f6e4;
+  }
+
+  &.negative {
+    color: $negative;
+    background: #fff5f5;
+    border-color: #fecaca;
+  }
+}
+
+.pnl-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border-radius: 8px;
+  overflow: hidden;
+  border: 1px solid $border;
+  font-size: 13px;
+
+  thead {
+    background: #f8fafc;
+
+    th {
+      padding: 10px 14px;
+      text-align: left;
+      font-size: 11px;
+      font-weight: 600;
+      color: $text-muted;
+      text-transform: uppercase;
+      letter-spacing: 0.04em;
+      border-bottom: 1px solid $border;
+      white-space: nowrap;
+
+      &.align-right {
+        text-align: right;
+      }
+    }
+  }
+
+  tbody {
+    tr {
+      border-bottom: 1px solid $border;
+      transition: background 0.1s;
+
+      &:last-child {
+        border-bottom: none;
+        font-weight: 600;
+        background: #f8fafc;
+      }
+
+      &:hover {
+        background: #f1f5f9;
+      }
+    }
+
+    td {
+      padding: 10px 14px;
+      color: $text-main;
+
+      &.align-right {
+        text-align: right;
+      }
+
+      &.positive {
+        color: $positive;
+        font-weight: 600;
+      }
+
+      &.negative {
+        color: $negative;
+        font-weight: 600;
+      }
+    }
+  }
+}

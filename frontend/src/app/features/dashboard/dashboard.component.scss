@@ -1,0 +1,163 @@
+:host {
+  display: block;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 20px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+}
+
+.no-data-cta {
+  text-align: center;
+  padding: 48px 24px;
+  margin-bottom: 24px;
+  background: #ffffff;
+  border-radius: 8px;
+  border: 2px dashed #e2e8f0;
+
+  p {
+    color: #64748b;
+    font-size: 15px;
+    margin-bottom: 16px;
+  }
+}
+
+.btn-primary {
+  display: inline-block;
+  padding: 10px 20px;
+  background: #1a73e8;
+  color: #ffffff;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  text-decoration: none;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #1557b0;
+    text-decoration: none;
+    color: #ffffff;
+  }
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  padding: 20px 24px;
+
+  &--wide {
+    grid-column: 1 / -1;
+  }
+
+  &__title {
+    font-size: 13px;
+    font-weight: 600;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 12px;
+  }
+}
+
+.pnl-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1e293b;
+
+  &.positive {
+    color: #0d9488;
+  }
+
+  &.negative {
+    color: #dc2626;
+  }
+}
+
+.counts-row {
+  display: flex;
+  gap: 32px;
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+
+  &__value {
+    font-size: 28px;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1;
+  }
+
+  &__label {
+    font-size: 12px;
+    color: #64748b;
+    font-weight: 500;
+  }
+}
+
+.upload-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+
+  &__item {
+    a {
+      display: block;
+      padding: 6px 8px;
+      border-radius: 4px;
+      color: #1a73e8;
+      font-size: 14px;
+      transition: background 0.1s;
+
+      &:hover {
+        background: #f1f5f9;
+      }
+    }
+  }
+}
+
+.loading-text {
+  color: #64748b;
+  font-size: 14px;
+}
+
+.empty-text {
+  color: #64748b;
+  font-size: 14px;
+  margin: 0;
+}
+
+.error-box {
+  p {
+    color: #dc2626;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+}
+
+.btn-retry {
+  padding: 6px 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #64748b;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.15s;
+
+  &:hover {
+    background: #f1f5f9;
+  }
+}

@@ -605,4 +605,32 @@ describe('DashboardComponent', () => {
       expect(link).not.toBeNull();
     });
   });
+
+  // ── 6. Layout and styling elements ───────────────────────────────────────────
+
+  describe('layout elements', () => {
+    it('37. should show "Open" label next to open-count after successful counts load', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makePnlSummary([])));
+      positionServiceMock.getPositions
+        .mockReturnValueOnce(of(makePositionListResponse(4)))
+        .mockReturnValueOnce(of(makePositionListResponse(2)));
+      uploadServiceMock.getUploads.mockReturnValue(of(makeUploadListResponse([])));
+      const fixture = createComponent();
+      fixture.detectChanges();
+      const countsCard = fixture.debugElement.query(By.css('[data-testid="counts-card"]'));
+      expect(countsCard.nativeElement.textContent).toContain('Open');
+    });
+
+    it('38. should show "Closed" label next to closed-count after successful counts load', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makePnlSummary([])));
+      positionServiceMock.getPositions
+        .mockReturnValueOnce(of(makePositionListResponse(4)))
+        .mockReturnValueOnce(of(makePositionListResponse(2)));
+      uploadServiceMock.getUploads.mockReturnValue(of(makeUploadListResponse([])));
+      const fixture = createComponent();
+      fixture.detectChanges();
+      const countsCard = fixture.debugElement.query(By.css('[data-testid="counts-card"]'));
+      expect(countsCard.nativeElement.textContent).toContain('Closed');
+    });
+  });
 });

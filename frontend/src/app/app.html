@@ -1,1 +1,16 @@
-<router-outlet />
+<nav class="app-nav">
+  <div class="app-nav__inner">
+    <a class="app-nav__brand" routerLink="/dashboard">Options Tracker</a>
+    <ul class="app-nav__links">
+      <li><a routerLink="/dashboard" routerLinkActive="active" data-testid="nav-dashboard">Dashboard</a></li>
+      <li><a routerLink="/upload" routerLinkActive="active" data-testid="nav-upload">Upload</a></li>
+      <li><a routerLink="/transactions" routerLinkActive="active" data-testid="nav-transactions">Transactions</a></li>
+      <li><a routerLink="/positions" routerLinkActive="active" data-testid="nav-positions">Positions</a></li>
+      <li><a routerLink="/upload-history" routerLinkActive="active" data-testid="nav-upload-history">Upload History</a></li>
+      <li><a routerLink="/pnl-summary" routerLinkActive="active" data-testid="nav-pnl-summary">P&amp;L Summary</a></li>
+    </ul>
+  </div>
+</nav>
+<main class="app-content">
+  <router-outlet />
+</main>

@@ -8,6 +8,7 @@ import { StatusBadgeComponent } from '@shared/components/status-badge/status-bad
 @Component({
   selector: 'app-upload-history',
   templateUrl: './upload-history.component.html',
+  styleUrl: './upload-history.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
   imports: [RouterLink, RelativeDatePipe, StatusBadgeComponent],
 })
