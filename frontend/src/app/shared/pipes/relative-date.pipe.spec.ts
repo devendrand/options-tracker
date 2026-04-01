@@ -1,15 +1,10 @@
-import { DatePipe } from '@angular/common';
-import { TestBed } from '@angular/core/testing';
 import { RelativeDatePipe } from './relative-date.pipe';
 
 describe('RelativeDatePipe', () => {
   let pipe: RelativeDatePipe;
 
   beforeEach(() => {
-    TestBed.configureTestingModule({
-      providers: [RelativeDatePipe, DatePipe],
-    });
-    pipe = TestBed.inject(RelativeDatePipe);
+    pipe = new RelativeDatePipe();
   });
 
   it('should transform a YYYY-MM-DD date string to "MMM d, yyyy" format', () => {

@@ -1,17 +1,21 @@
-import { DatePipe } from '@angular/common';
-import { inject, Pipe, PipeTransform } from '@angular/core';
+import { Pipe, PipeTransform } from '@angular/core';
 
 @Pipe({
   name: 'relativeDate',
   pure: true,
 })
 export class RelativeDatePipe implements PipeTransform {
-  private readonly datePipe = inject(DatePipe);
-
   transform(value: string | null | undefined): string | null {
     if (!value) {
       return null;
     }
-    return this.datePipe.transform(value, 'MMM d, yyyy', 'UTC');
+    // If value is already an ISO string with time, use as-is; otherwise append UTC midnight
+    const date = new Date(value.includes('T') ? value : value + 'T00:00:00Z');
+    return date.toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+      timeZone: 'UTC',
+    });
   }
 }
