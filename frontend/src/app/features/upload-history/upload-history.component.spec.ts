@@ -11,7 +11,7 @@ function makeUpload(overrides: Partial<Upload> = {}): Upload {
   return {
     id: 'up-1',
     filename: 'trades.csv',
-    status: 'COMPLETED',
+    status: 'ACTIVE',
     broker: 'ETRADE',
     row_count: 100,
     options_count: 20,

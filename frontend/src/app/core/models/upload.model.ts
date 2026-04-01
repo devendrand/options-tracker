@@ -1,4 +1,4 @@
-export type UploadStatus = 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'SOFT_DELETED';
+export type UploadStatus = 'ACTIVE' | 'SOFT_DELETED';
 
 export interface Upload {
   id: string;

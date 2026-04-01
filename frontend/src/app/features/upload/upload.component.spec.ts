@@ -8,7 +8,7 @@ import { Upload } from '../../core/models/upload.model';
 const mockUpload: Upload = {
   id: 'abc123',
   filename: 'trades.csv',
-  status: 'COMPLETED',
+  status: 'ACTIVE',
   broker: 'ETRADE',
   row_count: 42,
   options_count: 10,

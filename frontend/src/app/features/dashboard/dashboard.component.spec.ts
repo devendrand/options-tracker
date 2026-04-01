@@ -32,7 +32,7 @@ function makeUpload(id: string, filename = `upload-${id}.csv`): Upload {
   return {
     id,
     filename,
-    status: 'COMPLETED',
+    status: 'ACTIVE',
     broker: 'ETRADE',
     row_count: 10,
     options_count: 5,
