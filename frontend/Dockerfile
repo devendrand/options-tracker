@@ -16,7 +16,7 @@ COPY . .
 EXPOSE 4200
 
 # --poll 500 enables file-change detection across Docker bind mounts on all OSes
-CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "500"]
+CMD ["npx", "ng", "serve", "--host", "0.0.0.0", "--port", "4200", "--poll", "500", "--proxy-config", "proxy.conf.docker.json"]
 
 
 # ── Stage 2: production build ─────────────────────────────────────────────────
