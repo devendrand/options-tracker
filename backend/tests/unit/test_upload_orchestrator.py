@@ -681,7 +681,7 @@ class TestPersistMatchResult:
         txn.price = price
         return txn
 
-    def test_open_only_creates_options_position_and_leg(self) -> None:
+    async def test_open_only_creates_options_position_and_leg(self) -> None:
         """A single STO transaction creates one OptionsPosition + one OptionsPositionLeg."""
         from app.services.matcher import TransactionInput, match_transactions
 
@@ -695,7 +695,7 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         legs = [o for o in added if isinstance(o, OptionsPositionLeg)]
@@ -705,7 +705,7 @@ class TestPersistMatchResult:
         assert positions[0].status == OptionsPositionStatus.OPEN
         assert legs[0].leg_role == LegRole.OPEN
 
-    def test_open_position_has_no_pnl(self) -> None:
+    async def test_open_position_has_no_pnl(self) -> None:
         """An OPEN position (no close legs) has realized_pnl=None."""
         from app.services.matcher import match_transactions
 
@@ -719,12 +719,12 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert positions[0].realized_pnl is None
 
-    def test_closed_position_has_pnl_set(self) -> None:
+    async def test_closed_position_has_pnl_set(self) -> None:
         """STO + BTC in same batch produces a CLOSED position with realized_pnl."""
         from app.services.matcher import TransactionInput, match_transactions
         from app.models.transaction import Transaction
@@ -767,7 +767,7 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
@@ -776,7 +776,7 @@ class TestPersistMatchResult:
         # P&L = open_amount + close_amount - commissions = 250 + (-100) - 0.65 - 0.65 = 148.70
         assert pos.realized_pnl == Decimal("148.70")
 
-    def test_equity_buy_creates_equity_position(self) -> None:
+    async def test_equity_buy_creates_equity_position(self) -> None:
         """An EQUITY_BUY transaction produces an EquityPosition with PURCHASE source."""
         from app.services.matcher import match_transactions
 
@@ -790,7 +790,7 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         equity_positions = [o for o in added if isinstance(o, EquityPosition)]
         assert len(equity_positions) == 1
@@ -802,7 +802,7 @@ class TestPersistMatchResult:
         assert ep.status == EquityPositionStatus.OPEN
         assert ep.assigned_position_id is None
 
-    def test_short_call_with_100_shares_is_covered(self) -> None:
+    async def test_short_call_with_100_shares_is_covered(self) -> None:
         """SHORT CALL with >= 100 shares of underlying → is_covered_call=True."""
         from app.services.matcher import match_transactions
 
@@ -817,13 +817,13 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
         assert positions[0].is_covered_call is True
 
-    def test_short_call_without_shares_is_not_covered(self) -> None:
+    async def test_short_call_without_shares_is_not_covered(self) -> None:
         """SHORT CALL with no equity holding → is_covered_call=False."""
         from app.services.matcher import match_transactions
 
@@ -837,13 +837,13 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
         assert positions[0].is_covered_call is False
 
-    def test_non_short_call_put_position_is_not_covered(self) -> None:
+    async def test_non_short_call_put_position_is_not_covered(self) -> None:
         """A SHORT PUT position is never stamped as a covered call."""
         from app.services.matcher import match_transactions
 
@@ -857,13 +857,13 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
         assert positions[0].is_covered_call is False
 
-    def test_empty_match_result_adds_nothing(self) -> None:
+    async def test_empty_match_result_adds_nothing(self) -> None:
         """Non-options, non-equity rows (e.g., DIVIDEND) produce no positions or lots."""
         from app.services.matcher import MatchResult
 
@@ -872,14 +872,14 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, [])
+        await _persist_match_result(session, match_result, [])
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         equity_positions = [o for o in added if isinstance(o, EquityPosition)]
         assert positions == []
         assert equity_positions == []
 
-    def test_scale_in_close_deduplicates_transaction_for_pnl(self) -> None:
+    async def test_scale_in_close_deduplicates_transaction_for_pnl(self) -> None:
         """2 scale-in STO legs closed by 1 BTC transaction — BTC counted once in P&L."""
         from app.services.matcher import match_transactions
         from app.models.transaction import Transaction
@@ -928,7 +928,7 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
@@ -939,7 +939,7 @@ class TestPersistMatchResult:
         # P&L = 250 + 240 + (-200) - 0.65 - 0.65 - 1.30 = 287.40
         assert pos.realized_pnl == Decimal("287.40")
 
-    def test_closed_equity_lot_not_added_to_holdings(self) -> None:
+    async def test_closed_equity_lot_not_added_to_holdings(self) -> None:
         """A CLOSED equity lot (result of EQUITY_SELL in same batch) does not count
         toward equity holdings for covered call detection."""
         from app.services.matcher import EquityLot, MatchResult
@@ -974,14 +974,14 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         # Closed lot → shares NOT added to holdings → SHORT CALL NOT covered
         positions = [o for o in added if isinstance(o, OptionsPosition)]
         assert len(positions) == 1
         assert positions[0].is_covered_call is False
 
-    def test_closed_position_has_two_legs(self) -> None:
+    async def test_closed_position_has_two_legs(self) -> None:
         """A fully closed position has exactly one OPEN + one CLOSE leg."""
         from app.services.matcher import match_transactions
         from app.models.transaction import Transaction
@@ -1019,7 +1019,7 @@ class TestPersistMatchResult:
         added: list[object] = []
         session.add.side_effect = added.append
 
-        _persist_match_result(session, match_result, active_txns)
+        await _persist_match_result(session, match_result, active_txns)
 
         legs = [o for o in added if isinstance(o, OptionsPositionLeg)]
         assert len(legs) == 2

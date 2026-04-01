@@ -150,8 +150,7 @@ async def process_upload(
     if active_txns:
         tx_inputs = _build_transaction_inputs(active_txns, categories)
         match_result = match_transactions(tx_inputs)
-        _persist_match_result(session, match_result, active_txns)
-        await session.flush()
+        await _persist_match_result(session, match_result, active_txns)
 
     await session.refresh(upload)
 
@@ -222,15 +221,15 @@ def _build_transaction_inputs(
     return result
 
 
-def _persist_match_result(
+async def _persist_match_result(
     session: AsyncSession,
     match_result: MatchResult,
     active_txns: list[tuple[int, Transaction]],
 ) -> None:
     """Persist MatchResult to the session: positions, legs, equity lots, P&L, covered calls.
 
-    All objects are added to *session* without flushing — the caller is
-    responsible for calling ``session.flush()`` afterwards.
+    Positions are flushed individually so their UUIDs are available for
+    leg foreign keys.
 
     :param session: The active SQLAlchemy async session.
     :param match_result: Output of :func:`match_transactions`.
@@ -272,6 +271,7 @@ def _persist_match_result(
             is_covered_call=False,
         )
         session.add(db_pos)
+        await session.flush()
 
         for leg in matched_pos.legs:
             txn = get_txn(leg.transaction_index)
@@ -375,6 +375,8 @@ def _persist_match_result(
     coverage_results = evaluate_covered_calls(short_call_positions, equity_holdings)
     for idx, is_covered in coverage_results:
         short_call_db_positions[idx].is_covered_call = is_covered
+
+    await session.flush()
 
 
 async def _fetch_existing_transactions(
