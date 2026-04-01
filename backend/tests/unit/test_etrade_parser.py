@@ -987,3 +987,258 @@ class TestEdgeCases:
         assert rows[1].strike == Decimal("600.00")
         assert rows[1].quantity == Decimal("2")
         assert rows[1].commission == Decimal("1.30")
+
+
+# ---------------------------------------------------------------------------
+# Test: real 13-column E*TRADE CSV format
+# ---------------------------------------------------------------------------
+
+# Real E*TRADE CSV preamble (6 lines before the header).
+_REAL_PREAMBLE = (
+    "All Transactions Activity Types\n"
+    "\n"
+    "Account Activity for Stocks -0067 from Current Year\n"
+    "\n"
+    "Total:,-921.88\n"
+    "\n"
+)
+
+# Real E*TRADE CSV header: 13 columns including Activity/Trade Date, Cusip,
+# Quantity # (not Quantity), Category, and Note.
+_REAL_HEADER = (
+    "Activity/Trade Date,Transaction Date,Settlement Date,Activity Type,"
+    "Description,Symbol,Cusip,Quantity #,Price $,Amount $,Commission,Category,Note\n"
+)
+
+
+def _real_row(
+    trade_date: str = "03/15/26",
+    transaction_date: str = "03/15/26",
+    settlement_date: str = "03/17/26",
+    activity_type: str = "Bought",
+    description: str = "APPLE INC COM",
+    symbol: str = "AAPL",
+    cusip: str = "--",
+    quantity: str = "10",
+    price: str = "105.00",
+    amount: str = "-1050.00",
+    commission: str = "0.0",
+    category: str = "--",
+    note: str = "--",
+) -> str:
+    """Return a single CSV data row in the real 13-column E*TRADE format."""
+    return (
+        f"{trade_date},{transaction_date},{settlement_date},{activity_type},"
+        f"{description},{symbol},{cusip},{quantity},{price},{amount},"
+        f"{commission},{category},{note}\n"
+    )
+
+
+def _make_real_csv(*data_rows: str) -> str:
+    """Build a valid real-format E*TRADE CSV string."""
+    return _REAL_PREAMBLE + _REAL_HEADER + "".join(data_rows)
+
+
+class TestRealETradeFormat:
+    """Tests using the actual 13-column E*TRADE CSV format.
+
+    Verifies that the header normalisation (Quantity # → Quantity,
+    Activity/Trade Date → Trade Date) and extra columns (Cusip, Category,
+    Note) are handled correctly alongside the existing 9-column fixture format.
+    """
+
+    def test_real_format_single_equity_buy_row_returns_one_result(self) -> None:
+        csv_content = _make_real_csv(_real_row())
+        rows = parse_etrade_csv(csv_content)
+        assert len(rows) == 1
+
+    def test_real_format_symbol_parsed_correctly(self) -> None:
+        csv_content = _make_real_csv(_real_row(symbol="AAPL"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].symbol == "AAPL"
+
+    def test_real_format_activity_type_preserved(self) -> None:
+        csv_content = _make_real_csv(_real_row(activity_type="Bought"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].activity_type == "Bought"
+
+    def test_real_format_quantity_hash_header_normalized(self) -> None:
+        """Quantity # column header is normalised to Quantity before parsing."""
+        csv_content = _make_real_csv(_real_row(quantity="5"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].quantity == Decimal("5")
+
+    def test_real_format_negative_quantity_stored_as_positive(self) -> None:
+        csv_content = _make_real_csv(_real_row(quantity="-6"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].quantity == Decimal("6")
+
+    def test_real_format_extra_columns_do_not_affect_result(self) -> None:
+        """Cusip, Category, Note columns are present but do not affect output."""
+        csv_content = _make_real_csv(_real_row(cusip="123456789", category="Equity", note="auto"))
+        rows = parse_etrade_csv(csv_content)
+        assert len(rows) == 1
+        assert rows[0].symbol == "AAPL"
+
+    def test_real_format_options_sold_short_multi_space_description(self) -> None:
+        """Multi-space options description from real E*TRADE CSV is parsed correctly."""
+        csv_content = _make_real_csv(
+            _real_row(
+                activity_type="Sold Short",
+                description="CALL NVDA   06/18/26   220.000",
+                symbol="NVDA",
+                quantity="-6.0",
+                price="2.03",
+                amount="1214.9",
+                commission="3.08",
+                settlement_date="03/24/26",
+            )
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].is_option is True
+        assert rows[0].option_type == "CALL"
+        assert rows[0].underlying == "NVDA"
+        assert rows[0].strike == Decimal("220.000")
+        assert rows[0].quantity == Decimal("6.0")
+        assert rows[0].commission == Decimal("3.08")
+
+    def test_real_format_put_options_multi_space_description(self) -> None:
+        """PUT with multi-space description (e.g. SPY put from real CSV)."""
+        csv_content = _make_real_csv(
+            _real_row(
+                activity_type="Sold Short",
+                description="PUT  SPY    04/24/26   600.000",
+                symbol="SPY",
+                quantity="-1.0",
+                price="4.03",
+                amount="402.49",
+                commission="0.51",
+                settlement_date="03/20/26",
+            )
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].is_option is True
+        assert rows[0].option_type == "PUT"
+        assert rows[0].underlying == "SPY"
+        assert rows[0].strike == Decimal("600.000")
+
+    def test_real_format_dividend_blank_quantity_returns_none(self) -> None:
+        """Real CSV dividend rows have empty Quantity field (,,) → None."""
+        csv_content = _make_real_csv(
+            _real_row(
+                activity_type="Dividend",
+                description="VANGUARD 500 INDX ADMIRAL",
+                symbol="--",
+                cusip="--",
+                quantity="",
+                price="",
+                amount="64.39",
+                commission="0.0",
+                settlement_date="",
+            )
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].quantity is None
+        assert rows[0].price is None
+        assert rows[0].amount == Decimal("64.39")
+        assert rows[0].symbol is None
+        assert rows[0].settlement_date is None
+
+    def test_real_format_online_transfer_blank_numeric_fields(self) -> None:
+        """Online Transfer rows have blank Quantity, Price, and no settlement date."""
+        csv_content = _make_real_csv(
+            _real_row(
+                activity_type="Online Transfer",
+                description="TRANSFER FROM XXXXXX1327 REFID:16759318395",
+                symbol="--",
+                cusip="--",
+                quantity="",
+                price="",
+                amount="1000.0",
+                commission="0.0",
+                settlement_date="",
+            )
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].activity_type == "Online Transfer"
+        assert rows[0].symbol is None
+        assert rows[0].quantity is None
+        assert rows[0].price is None
+        assert rows[0].amount == Decimal("1000.0")
+        assert rows[0].settlement_date is None
+
+    def test_real_format_transaction_date_parsed_correctly(self) -> None:
+        from datetime import date
+
+        csv_content = _make_real_csv(_real_row(transaction_date="03/23/26"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].transaction_date == date(2026, 3, 23)
+
+    def test_real_format_trade_date_equals_transaction_date(self) -> None:
+        """trade_date mirrors transaction_date in the current E*TRADE adapter."""
+        from datetime import date
+
+        csv_content = _make_real_csv(_real_row(trade_date="03/23/26", transaction_date="03/23/26"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].trade_date == date(2026, 3, 23)
+        assert rows[0].trade_date == rows[0].transaction_date
+
+    def test_real_format_settlement_date_parsed(self) -> None:
+        from datetime import date
+
+        csv_content = _make_real_csv(_real_row(settlement_date="03/24/26"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].settlement_date == date(2026, 3, 24)
+
+    def test_real_format_trailing_disclaimer_skipped(self) -> None:
+        """Footer row with fewer columns than header is filtered by _is_data_row."""
+        disclaimer = "The data and information in this spreadsheet are provided by E*TRADE\n"
+        csv_content = _make_real_csv(_real_row(), disclaimer)
+        rows = parse_etrade_csv(csv_content)
+        assert len(rows) == 1
+
+    def test_real_format_multiple_rows_parsed_in_order(self) -> None:
+        csv_content = _make_real_csv(
+            _real_row(transaction_date="03/10/26", symbol="AAPL"),
+            _real_row(transaction_date="03/11/26", symbol="NVDA"),
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert len(rows) == 2
+        assert rows[0].symbol == "AAPL"
+        assert rows[1].symbol == "NVDA"
+
+    def test_real_format_bought_to_cover_options(self) -> None:
+        """Bought To Cover with options description in real 13-column format."""
+        csv_content = _make_real_csv(
+            _real_row(
+                activity_type="Bought To Cover",
+                description="CALL SLV    03/20/26    75.000",
+                symbol="SLV",
+                quantity="1.0",
+                price="0.13",
+                amount="-13.51",
+                commission="0.51",
+                settlement_date="03/19/26",
+            )
+        )
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].is_option is True
+        assert rows[0].option_type == "CALL"
+        assert rows[0].underlying == "SLV"
+        assert rows[0].commission == Decimal("0.51")
+
+    def test_real_format_commission_zero_string(self) -> None:
+        """Real CSV uses '0.0' for zero commission (not blank)."""
+        csv_content = _make_real_csv(_real_row(commission="0.0"))
+        rows = parse_etrade_csv(csv_content)
+        assert rows[0].commission == Decimal("0.0")
+
+    def test_real_format_raw_data_contains_original_columns(self) -> None:
+        """raw_data preserves all 13 original columns including Cusip/Category/Note."""
+        csv_content = _make_real_csv(_real_row())
+        rows = parse_etrade_csv(csv_content)
+        # Header was normalised; raw_data keys reflect the normalised header.
+        assert "Transaction Date" in rows[0].raw_data
+        assert "Quantity" in rows[0].raw_data
+        assert "Trade Date" in rows[0].raw_data
+        assert "Cusip" in rows[0].raw_data

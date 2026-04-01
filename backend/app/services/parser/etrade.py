@@ -115,45 +115,45 @@ def _parse_date(value: str) -> date:
     return date(2000 + int(year_2), int(month), int(day))
 
 
-def _parse_optional_date(value: str) -> date | None:
-    """Return ``None`` for sentinel/blank; otherwise parse the date."""
-    stripped = value.strip()
+def _parse_optional_date(value: str | None) -> date | None:
+    """Return ``None`` for sentinel/blank/None; otherwise parse the date."""
+    stripped = (value or "").strip()
     if not stripped or stripped == _SENTINEL:
         return None
     return _parse_date(stripped)
 
 
-def _parse_optional_decimal(value: str) -> Decimal | None:
-    """Return ``None`` for sentinel/blank; otherwise return a ``Decimal``."""
-    stripped = value.strip()
+def _parse_optional_decimal(value: str | None) -> Decimal | None:
+    """Return ``None`` for sentinel/blank/None; otherwise return a ``Decimal``."""
+    stripped = (value or "").strip()
     if not stripped or stripped == _SENTINEL:
         return None
     return Decimal(stripped)
 
 
-def _parse_commission(value: str) -> Decimal:
-    """Return ``Decimal('0.00')`` for blank or sentinel; otherwise parse."""
-    stripped = value.strip()
+def _parse_commission(value: str | None) -> Decimal:
+    """Return ``Decimal('0.00')`` for blank, sentinel, or None; otherwise parse."""
+    stripped = (value or "").strip()
     if not stripped or stripped == _SENTINEL:
         return Decimal("0.00")
     return Decimal(stripped)
 
 
-def _parse_optional_symbol(value: str) -> str | None:
-    """Return ``None`` for sentinel/blank; otherwise return the raw string."""
-    stripped = value.strip()
+def _parse_optional_symbol(value: str | None) -> str | None:
+    """Return ``None`` for sentinel/blank/None; otherwise return the raw string."""
+    stripped = (value or "").strip()
     if not stripped or stripped == _SENTINEL:
         return None
     return stripped
 
 
-def _parse_price(value: str, activity_type: str) -> Decimal | None:
+def _parse_price(value: str | None, activity_type: str) -> Decimal | None:
     """Parse the ``Price $`` field.
 
     Special case: ``Option Expired`` rows have a blank (or ``--``) price
     field; this is not an error — default to ``Decimal('0.00')``.
     """
-    stripped = value.strip()
+    stripped = (value or "").strip()
     if not stripped or stripped == _SENTINEL:
         if activity_type.strip() == "Option Expired":
             return Decimal("0.00")
@@ -191,7 +191,7 @@ def _is_data_row(row: dict[str, str]) -> bool:
     ``csv.DictReader`` already omits completely blank lines, so we only
     need to guard against disclaimer text in the first column.
     """
-    raw_date = row.get(_COL_TRANSACTION_DATE, "").strip()
+    raw_date = (row.get(_COL_TRANSACTION_DATE) or "").strip()
     # A valid date field matches MM/DD/YY; anything else (empty or text) is skipped.
     return bool(re.match(r"^\d{2}/\d{2}/\d{2}$", raw_date))
 
@@ -231,9 +231,7 @@ def parse_etrade_csv(content: str) -> list[ParsedRow]:
     # Real CSV uses "Quantity #" and "Activity/Trade Date"; our parser
     # expects "Quantity" and "Transaction Date". Handle both formats.
     data_lines[0] = (
-        data_lines[0]
-        .replace("Quantity #", "Quantity")
-        .replace("Activity/Trade Date", "Trade Date")
+        data_lines[0].replace("Quantity #", "Quantity").replace("Activity/Trade Date", "Trade Date")
     )
 
     reader = csv.DictReader(io.StringIO("\n".join(data_lines)))
@@ -248,8 +246,8 @@ def parse_etrade_csv(content: str) -> list[ParsedRow]:
         raw_data: dict[str, str] = dict(row)
 
         transaction_date = _parse_date(row[_COL_TRANSACTION_DATE])
-        activity_type = row[_COL_ACTIVITY_TYPE].strip()
-        description = row[_COL_DESCRIPTION].strip()
+        activity_type = (row.get(_COL_ACTIVITY_TYPE) or "").strip()
+        description = (row.get(_COL_DESCRIPTION) or "").strip()
 
         symbol = _parse_optional_symbol(row[_COL_SYMBOL])
 
