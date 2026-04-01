@@ -102,7 +102,9 @@ def delete(path: str) -> requests.Response:
 def find_position(positions: list[dict], underlying: str, option_type: str | None = None) -> dict | None:
     """Find the first matching position in a positions list."""
     for p in positions:
-        if p.get("underlying") == underlying:
+        # Options positions use "underlying", equity positions use "symbol"
+        name = p.get("underlying") or p.get("symbol")
+        if name == underlying:
             if option_type is None or p.get("option_type") == option_type:
                 return p
     return None
@@ -267,7 +269,7 @@ def test_covered_call() -> tuple[str, str]:
     equity_positions = get_equity_positions()
     nvda_equity = find_position(equity_positions, "NVDA")
     check(nvda_equity is not None, "SMOKE-CC-18: NVDA equity position created (200 shares)",
-          f"equity_items={[p.get('underlying') for p in equity_positions]}")
+          f"equity_items={[p.get('symbol') for p in equity_positions]}")
     if nvda_equity:
         check(float(nvda_equity.get("quantity", 0)) == 200.0, "SMOKE-CC-19: NVDA equity quantity=200",
               f"quantity={nvda_equity.get('quantity')}")
@@ -362,7 +364,7 @@ def test_assignment() -> str:
     equity_positions = get_equity_positions()
     tsla_equity = find_position(equity_positions, "TSLA")
     check(tsla_equity is not None, "SMOKE-ASN-07: TSLA equity position created via assignment",
-          f"equity_items={[p.get('underlying') for p in equity_positions]}")
+          f"equity_items={[p.get('symbol') for p in equity_positions]}")
     if tsla_equity:
         check(tsla_equity.get("source") == "ASSIGNMENT",
               "SMOKE-ASN-08: TSLA equity source=ASSIGNMENT",
@@ -464,7 +466,7 @@ def test_equity_trades() -> str:
     equity_positions = get_equity_positions()
     meta_equity = find_position(equity_positions, "META")
     check(meta_equity is not None, "SMOKE-EQ-05: META equity position exists",
-          f"equity_items={[p.get('underlying') for p in equity_positions]}")
+          f"equity_items={[p.get('symbol') for p in equity_positions]}")
     if meta_equity:
         check(meta_equity.get("status") == "OPEN",
               "SMOKE-EQ-06: META equity status=OPEN (5 shares remaining)",

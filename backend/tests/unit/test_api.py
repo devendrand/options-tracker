@@ -105,7 +105,6 @@ def _eq_pos_ns(**overrides: object) -> SimpleNamespace:
     base: dict[str, object] = dict(
         id=uuid.uuid4(),
         symbol="AAPL",
-        underlying="AAPL",
         quantity=Decimal("100"),
         cost_basis_per_share=Decimal("150.00"),
         status=EquityPositionStatus.OPEN,
@@ -354,6 +353,7 @@ class TestListPositions:
         assert data["total"] == 1
         assert data["options_items"] == []
         assert len(data["equity_items"]) == 1
+        assert data["equity_items"][0]["symbol"] == "AAPL"
 
     def test_list_positions_all(self, api_client: TestClient) -> None:
         pos_ns = _opts_pos_ns()

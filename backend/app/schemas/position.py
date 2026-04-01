@@ -97,10 +97,10 @@ class OptionsPositionDetailResponse(OptionsPositionResponse):
 class EquityPositionResponse(BaseModel):
     """Schema for an equity position list item."""
 
-    model_config = ConfigDict(from_attributes=True, populate_by_name=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: uuid.UUID
-    underlying: str = Field(alias="symbol")
+    symbol: str
     quantity: Decimal
     cost_basis_per_share: Decimal
     status: EquityPositionStatus

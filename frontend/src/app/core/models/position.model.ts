@@ -41,7 +41,7 @@ export interface OptionsPositionDetail extends OptionsPosition {
 
 export interface EquityPosition {
   id: string;
-  underlying: string;
+  symbol: string;
   quantity: string;
   cost_basis_per_share: string;
   status: EquityPositionStatus;

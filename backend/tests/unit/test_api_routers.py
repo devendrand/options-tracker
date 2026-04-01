@@ -113,7 +113,7 @@ def _make_options_position_response(**overrides: object) -> OptionsPositionRespo
 def _make_equity_position_response(**overrides: object) -> EquityPositionResponse:
     base: dict[str, object] = dict(
         id=uuid.uuid4(),
-        underlying="AAPL",
+        symbol="AAPL",
         quantity=Decimal("100"),
         cost_basis_per_share=Decimal("150.00"),
         status=EquityPositionStatus.OPEN,

@@ -559,7 +559,7 @@ class TestEquityPositionResponse:
     def test_from_attributes_open_equity_position(self) -> None:
         obj = self._eq_obj()
         resp = EquityPositionResponse.model_validate(obj)
-        assert resp.underlying == "AAPL"
+        assert resp.symbol == "AAPL"
         assert resp.status == EquityPositionStatus.OPEN
         assert resp.source == EquityPositionSource.PURCHASE
         assert resp.equity_realized_pnl is None
@@ -620,7 +620,7 @@ class TestPositionListResponse:
         )
         eq = EquityPositionResponse(
             id=uuid.uuid4(),
-            underlying="AAPL",
+            symbol="AAPL",
             quantity=Decimal("100"),
             cost_basis_per_share=Decimal("150.00"),
             status=EquityPositionStatus.OPEN,
