@@ -6,7 +6,12 @@ import { PnlService } from '@core/services/pnl.service';
 import { PnlSummary } from '@core/models/pnl.model';
 
 function makeEntry(label: string, totalPnl = '100.00', optionsPnl = '100.00', equityPnl = '0.00') {
-  return { period_label: label, options_pnl: optionsPnl, equity_pnl: equityPnl, total_pnl: totalPnl };
+  return {
+    period_label: label,
+    options_pnl: optionsPnl,
+    equity_pnl: equityPnl,
+    total_pnl: totalPnl,
+  };
 }
 
 function makeSummary(items = [makeEntry('2026', '1250.00')], period = 'year'): PnlSummary {
@@ -92,6 +97,14 @@ describe('PnlSummaryComponent', () => {
       fixture.componentInstance.summary.set(null);
       fixture.detectChanges();
       expect(fixture.debugElement.query(By.css('[data-testid="empty-state"]'))).not.toBeNull();
+    });
+
+    it('7b. totalPnl returns "0.00" when summary has null items', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.summary.set({ period: 'year', items: null as unknown as [] });
+      expect(fixture.componentInstance.totalPnl()).toBe('0.00');
     });
   });
 

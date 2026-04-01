@@ -39,11 +39,9 @@
           <td class="align-right">{{ upload.duplicate_count ?? '—' }}</td>
           <td class="align-right">
             @if ((upload.possible_duplicate_count ?? 0) > 0) {
-              <a
-                [attr.data-testid]="'possible-duplicate-link-' + upload.id"
-                data-testid="possible-duplicate-link"
-                [routerLink]="['/transactions']"
-              >{{ upload.possible_duplicate_count }}</a>
+              <a data-testid="possible-duplicate-link" [routerLink]="['/transactions']">{{
+                upload.possible_duplicate_count
+              }}</a>
             } @else {
               {{ upload.possible_duplicate_count ?? '—' }}
             }
@@ -60,8 +58,8 @@
             </button>
             @if (deletingId() === upload.id) {
               <div
-                [attr.data-testid]="'confirm-panel-' + upload.id"
                 data-testid="delete-confirm-dialog"
+                [attr.data-confirm-id]="'confirm-panel-' + upload.id"
                 class="confirm-panel"
               >
                 <p data-testid="delete-warning-text" class="warning">
@@ -71,20 +69,10 @@
                 @if (deleteError()) {
                   <p data-testid="delete-error-text" class="error">{{ deleteError() }}</p>
                 }
-                <button
-                  [attr.data-testid]="'confirm-delete-btn-' + upload.id"
-                  data-testid="confirm-delete-btn"
-                  (click)="executeDelete()"
-                >
+                <button data-testid="confirm-delete-btn" (click)="executeDelete()">
                   Confirm Delete
                 </button>
-                <button
-                  [attr.data-testid]="'cancel-delete-btn-' + upload.id"
-                  data-testid="cancel-delete-btn"
-                  (click)="cancelDelete()"
-                >
-                  Cancel
-                </button>
+                <button data-testid="cancel-delete-btn" (click)="cancelDelete()">Cancel</button>
               </div>
             }
           </td>

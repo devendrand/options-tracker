@@ -128,7 +128,9 @@ describe('UploadHistoryComponent', () => {
 
   describe('error state', () => {
     it('9. should show error state when API fails', () => {
-      uploadServiceMock.getUploads.mockReturnValue(throwError(() => ({ message: 'Network error' })));
+      uploadServiceMock.getUploads.mockReturnValue(
+        throwError(() => ({ message: 'Network error' })),
+      );
       const fixture = TestBed.createComponent(UploadHistoryComponent);
       fixture.detectChanges();
       expect(fixture.debugElement.query(By.css('[data-testid="error-state"]'))).not.toBeNull();
@@ -324,10 +326,10 @@ describe('UploadHistoryComponent', () => {
       fixture.detectChanges();
 
       expect(
-        fixture.debugElement.query(By.css('[data-testid="confirm-panel-up-1"]')),
+        fixture.debugElement.query(By.css('[data-confirm-id="confirm-panel-up-1"]')),
       ).toBeNull();
       expect(
-        fixture.debugElement.query(By.css('[data-testid="confirm-panel-up-2"]')),
+        fixture.debugElement.query(By.css('[data-confirm-id="confirm-panel-up-2"]')),
       ).not.toBeNull();
     });
 
