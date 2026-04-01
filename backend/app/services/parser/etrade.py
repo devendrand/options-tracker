@@ -226,6 +226,16 @@ def parse_etrade_csv(content: str) -> list[ParsedRow]:
         return []
 
     data_lines = lines[_PREAMBLE_LINE_COUNT:]
+
+    # Normalise header: map real E*TRADE column names to internal names.
+    # Real CSV uses "Quantity #" and "Activity/Trade Date"; our parser
+    # expects "Quantity" and "Transaction Date". Handle both formats.
+    data_lines[0] = (
+        data_lines[0]
+        .replace("Quantity #", "Quantity")
+        .replace("Activity/Trade Date", "Trade Date")
+    )
+
     reader = csv.DictReader(io.StringIO("\n".join(data_lines)))
 
     results: list[ParsedRow] = []
