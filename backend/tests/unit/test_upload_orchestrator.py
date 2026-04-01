@@ -10,6 +10,11 @@ Coverage strategy:
 - Cover: internal transfer detection
 - Cover: _build_option_symbol for options and non-options rows
 - Cover: _fetch_existing_transactions builds correct dict list
+- Cover: matcher integration — OptionsPosition, OptionsPositionLeg, EquityPosition creation
+- Cover: P&L calculation wired into closed positions
+- Cover: covered call detection stamped on SHORT CALL positions
+- Cover: _build_transaction_inputs helpers
+- Cover: _persist_match_result helpers
 """
 
 from __future__ import annotations
@@ -22,13 +27,22 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from app.models.enums import (
+    EquityPositionSource,
+    EquityPositionStatus,
+    LegRole,
+    OptionsPositionStatus,
     TransactionCategory,
 )
+from app.models.equity_position import EquityPosition
+from app.models.options_position import OptionsPosition
+from app.models.options_position_leg import OptionsPositionLeg
 from app.services.parser.etrade import ParsedRow
 from app.services.upload_orchestrator import (
     UploadResult,
     _build_option_symbol,
+    _build_transaction_inputs,
     _fetch_existing_transactions,
+    _persist_match_result,
     process_upload,
 )
 
@@ -459,3 +473,714 @@ class TestProcessUpload:
         assert len(txns) == 1
         # option_symbol should be non-None for options rows
         assert txns[0].option_symbol is not None
+
+
+def _options_close_row(
+    transaction_date: str = "03/20/26",
+    description: str = "CALL NVDA 06/18/26 220.00",
+    symbol: str = "NVDA",
+    quantity: str = "1",
+    price: str = "1.00",
+    amount: str = "-100.00",
+    commission: str = "0.65",
+    settlement_date: str = "03/22/26",
+) -> str:
+    """Build a CSV row that classifies as OPTIONS_BUY_TO_CLOSE ('Bought To Cover' + options)."""
+    return (
+        f"{transaction_date},Bought To Cover,{description},{symbol},"
+        f"{quantity},{price},{amount},{commission},{settlement_date}\n"
+    )
+
+
+# ---------------------------------------------------------------------------
+# _build_transaction_inputs
+# ---------------------------------------------------------------------------
+
+
+class TestBuildTransactionInputs:
+    """Tests for the _build_transaction_inputs helper."""
+
+    def _make_options_txn(self) -> "Transaction":
+        from app.models.transaction import Transaction
+
+        txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 15),
+            transaction_date=date(2026, 3, 15),
+            symbol="NVDA",
+            action="Sold Short",
+            quantity=Decimal("1"),
+            commission=Decimal("0.65"),
+            amount=Decimal("250.00"),
+            category=TransactionCategory.OPTIONS_SELL_TO_OPEN,
+        )
+        txn.option_type = "CALL"
+        txn.strike = Decimal("220.00")
+        txn.expiry = date(2026, 6, 18)
+        txn.price = Decimal("2.50")
+        return txn
+
+    def _make_equity_txn(self) -> "Transaction":
+        from app.models.transaction import Transaction
+
+        txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 15),
+            transaction_date=date(2026, 3, 15),
+            symbol="NVDA",
+            action="Bought",
+            quantity=Decimal("10"),
+            commission=Decimal("0.00"),
+            amount=Decimal("-1050.00"),
+            category=TransactionCategory.EQUITY_BUY,
+        )
+        txn.option_type = None
+        txn.strike = None
+        txn.expiry = None
+        txn.price = Decimal("105.00")
+        return txn
+
+    def test_options_txn_has_options_fields_set(self) -> None:
+        from app.services.matcher import TransactionInput
+
+        txn = self._make_options_txn()
+        active_txns = [(0, txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+
+        result = _build_transaction_inputs(active_txns, categories)
+
+        assert len(result) == 1
+        ti = result[0]
+        assert isinstance(ti, TransactionInput)
+        assert ti.index == 0
+        assert ti.category == TransactionCategory.OPTIONS_SELL_TO_OPEN
+        assert ti.underlying == "NVDA"
+        assert ti.option_type == "CALL"
+        assert ti.strike == Decimal("220.00")
+        assert ti.expiry == date(2026, 6, 18)
+
+    def test_equity_txn_has_no_options_fields(self) -> None:
+        txn = self._make_equity_txn()
+        active_txns = [(0, txn)]
+        categories = [TransactionCategory.EQUITY_BUY]
+
+        result = _build_transaction_inputs(active_txns, categories)
+
+        assert len(result) == 1
+        ti = result[0]
+        assert ti.underlying is None
+        assert ti.option_type is None
+        assert ti.strike is None
+        assert ti.expiry is None
+
+    def test_local_index_is_position_in_active_txns(self) -> None:
+        opt = self._make_options_txn()
+        eq = self._make_equity_txn()
+        active_txns = [(0, eq), (1, opt)]
+        categories = [TransactionCategory.EQUITY_BUY, TransactionCategory.OPTIONS_SELL_TO_OPEN]
+
+        result = _build_transaction_inputs(active_txns, categories)
+
+        assert result[0].index == 0
+        assert result[1].index == 1
+
+    def test_option_type_enum_is_coerced_to_str(self) -> None:
+        """option_type on Transaction may be OptionType enum (post-DB roundtrip)."""
+        from app.models.enums import OptionType
+
+        txn = self._make_options_txn()
+        txn.option_type = OptionType.CALL  # type: ignore[assignment]
+        active_txns = [(0, txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+
+        result = _build_transaction_inputs(active_txns, categories)
+
+        assert result[0].option_type == "CALL"
+
+    def test_empty_active_txns_returns_empty_list(self) -> None:
+        assert _build_transaction_inputs([], []) == []
+
+
+# ---------------------------------------------------------------------------
+# _persist_match_result
+# ---------------------------------------------------------------------------
+
+
+class TestPersistMatchResult:
+    """Tests for the _persist_match_result helper."""
+
+    def _make_session(self) -> MagicMock:
+        return _make_session()
+
+    def _make_options_txn(
+        self,
+        *,
+        transaction_date: date = date(2026, 3, 15),
+        quantity: Decimal = Decimal("1"),
+        price: Decimal = Decimal("2.50"),
+        amount: Decimal = Decimal("250.00"),
+        commission: Decimal = Decimal("0.65"),
+        option_type: str = "CALL",
+        strike: Decimal = Decimal("220.00"),
+        expiry: date = date(2026, 6, 18),
+        symbol: str = "NVDA",
+    ) -> "Transaction":
+        from app.models.transaction import Transaction
+
+        txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=transaction_date,
+            transaction_date=transaction_date,
+            symbol=symbol,
+            action="Sold Short",
+            quantity=quantity,
+            commission=commission,
+            amount=amount,
+            category=TransactionCategory.OPTIONS_SELL_TO_OPEN,
+        )
+        txn.option_type = option_type
+        txn.strike = strike
+        txn.expiry = expiry
+        txn.price = price
+        return txn
+
+    def _make_equity_txn(
+        self,
+        *,
+        transaction_date: date = date(2026, 3, 15),
+        quantity: Decimal = Decimal("100"),
+        price: Decimal = Decimal("200.00"),
+        amount: Decimal = Decimal("-20000.00"),
+        commission: Decimal = Decimal("0.00"),
+        symbol: str = "NVDA",
+    ) -> "Transaction":
+        from app.models.transaction import Transaction
+
+        txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=transaction_date,
+            transaction_date=transaction_date,
+            symbol=symbol,
+            action="Bought",
+            quantity=quantity,
+            commission=commission,
+            amount=amount,
+            category=TransactionCategory.EQUITY_BUY,
+        )
+        txn.option_type = None
+        txn.strike = None
+        txn.expiry = None
+        txn.price = price
+        return txn
+
+    def test_open_only_creates_options_position_and_leg(self) -> None:
+        """A single STO transaction creates one OptionsPosition + one OptionsPositionLeg."""
+        from app.services.matcher import TransactionInput, match_transactions
+
+        txn = self._make_options_txn()
+        active_txns = [(0, txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        legs = [o for o in added if isinstance(o, OptionsPositionLeg)]
+        assert len(positions) == 1
+        assert len(legs) == 1
+        assert positions[0].underlying == "NVDA"
+        assert positions[0].status == OptionsPositionStatus.OPEN
+        assert legs[0].leg_role == LegRole.OPEN
+
+    def test_open_position_has_no_pnl(self) -> None:
+        """An OPEN position (no close legs) has realized_pnl=None."""
+        from app.services.matcher import match_transactions
+
+        txn = self._make_options_txn()
+        active_txns = [(0, txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert positions[0].realized_pnl is None
+
+    def test_closed_position_has_pnl_set(self) -> None:
+        """STO + BTC in same batch produces a CLOSED position with realized_pnl."""
+        from app.services.matcher import TransactionInput, match_transactions
+        from app.models.transaction import Transaction
+
+        # STO: sell 1 contract for $250 premium
+        sto_txn = self._make_options_txn(
+            transaction_date=date(2026, 3, 15),
+            amount=Decimal("250.00"),
+            commission=Decimal("0.65"),
+            price=Decimal("2.50"),
+        )
+        # BTC: buy back for $100, closing the position
+        btc_txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 20),
+            transaction_date=date(2026, 3, 20),
+            symbol="NVDA",
+            action="Bought To Cover",
+            quantity=Decimal("1"),
+            commission=Decimal("0.65"),
+            amount=Decimal("-100.00"),
+            category=TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        )
+        btc_txn.option_type = "CALL"
+        btc_txn.strike = Decimal("220.00")
+        btc_txn.expiry = date(2026, 6, 18)
+        btc_txn.price = Decimal("1.00")
+
+        active_txns = [(0, sto_txn), (1, btc_txn)]
+        categories = [
+            TransactionCategory.OPTIONS_SELL_TO_OPEN,
+            TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        ]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        pos = positions[0]
+        assert pos.status == OptionsPositionStatus.CLOSED
+        # P&L = open_amount + close_amount - commissions = 250 + (-100) - 0.65 - 0.65 = 148.70
+        assert pos.realized_pnl == Decimal("148.70")
+
+    def test_equity_buy_creates_equity_position(self) -> None:
+        """An EQUITY_BUY transaction produces an EquityPosition with PURCHASE source."""
+        from app.services.matcher import match_transactions
+
+        eq_txn = self._make_equity_txn(quantity=Decimal("100"), price=Decimal("200.00"))
+        active_txns = [(0, eq_txn)]
+        categories = [TransactionCategory.EQUITY_BUY]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        equity_positions = [o for o in added if isinstance(o, EquityPosition)]
+        assert len(equity_positions) == 1
+        ep = equity_positions[0]
+        assert ep.symbol == "NVDA"
+        assert ep.quantity == Decimal("100")
+        assert ep.cost_basis_per_share == Decimal("200.00")
+        assert ep.source == EquityPositionSource.PURCHASE
+        assert ep.status == EquityPositionStatus.OPEN
+        assert ep.assigned_position_id is None
+
+    def test_short_call_with_100_shares_is_covered(self) -> None:
+        """SHORT CALL with >= 100 shares of underlying → is_covered_call=True."""
+        from app.services.matcher import match_transactions
+
+        eq_txn = self._make_equity_txn(quantity=Decimal("100"), price=Decimal("200.00"))
+        opt_txn = self._make_options_txn()
+        active_txns = [(0, eq_txn), (1, opt_txn)]
+        categories = [TransactionCategory.EQUITY_BUY, TransactionCategory.OPTIONS_SELL_TO_OPEN]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is True
+
+    def test_short_call_without_shares_is_not_covered(self) -> None:
+        """SHORT CALL with no equity holding → is_covered_call=False."""
+        from app.services.matcher import match_transactions
+
+        opt_txn = self._make_options_txn()
+        active_txns = [(0, opt_txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is False
+
+    def test_non_short_call_put_position_is_not_covered(self) -> None:
+        """A SHORT PUT position is never stamped as a covered call."""
+        from app.services.matcher import match_transactions
+
+        put_txn = self._make_options_txn(option_type="PUT")
+        active_txns = [(0, put_txn)]
+        categories = [TransactionCategory.OPTIONS_SELL_TO_OPEN]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is False
+
+    def test_empty_match_result_adds_nothing(self) -> None:
+        """Non-options, non-equity rows (e.g., DIVIDEND) produce no positions or lots."""
+        from app.services.matcher import MatchResult
+
+        match_result = MatchResult(positions=[], equity_lots=[])
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, [])
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        equity_positions = [o for o in added if isinstance(o, EquityPosition)]
+        assert positions == []
+        assert equity_positions == []
+
+    def test_scale_in_close_deduplicates_transaction_for_pnl(self) -> None:
+        """2 scale-in STO legs closed by 1 BTC transaction — BTC counted once in P&L."""
+        from app.services.matcher import match_transactions
+        from app.models.transaction import Transaction
+
+        # STO1: 1 contract
+        sto1 = self._make_options_txn(
+            transaction_date=date(2026, 3, 10),
+            amount=Decimal("250.00"),
+            commission=Decimal("0.65"),
+        )
+        # STO2: 1 contract (scale-in, same contract, later date)
+        sto2 = self._make_options_txn(
+            transaction_date=date(2026, 3, 12),
+            amount=Decimal("240.00"),
+            commission=Decimal("0.65"),
+        )
+        # BTC: 2 contracts (closes both open legs at once)
+        btc = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 20),
+            transaction_date=date(2026, 3, 20),
+            symbol="NVDA",
+            action="Bought To Cover",
+            quantity=Decimal("2"),
+            commission=Decimal("1.30"),
+            amount=Decimal("-200.00"),
+            category=TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        )
+        btc.option_type = "CALL"
+        btc.strike = Decimal("220.00")
+        btc.expiry = date(2026, 6, 18)
+        btc.price = Decimal("1.00")
+
+        active_txns = [(0, sto1), (1, sto2), (2, btc)]
+        categories = [
+            TransactionCategory.OPTIONS_SELL_TO_OPEN,
+            TransactionCategory.OPTIONS_SELL_TO_OPEN,
+            TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        ]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        pos = positions[0]
+        assert pos.status == OptionsPositionStatus.CLOSED
+        # BTC transaction (index 2) appears twice in legs (matched both STO1 and STO2)
+        # but must be counted once in P&L.
+        # P&L = 250 + 240 + (-200) - 0.65 - 0.65 - 1.30 = 287.40
+        assert pos.realized_pnl == Decimal("287.40")
+
+    def test_closed_equity_lot_not_added_to_holdings(self) -> None:
+        """A CLOSED equity lot (result of EQUITY_SELL in same batch) does not count
+        toward equity holdings for covered call detection."""
+        from app.services.matcher import EquityLot, MatchResult
+
+        closed_lot = EquityLot(
+            symbol="NVDA",
+            quantity=Decimal("100"),
+            cost_basis_per_share=Decimal("200.00"),
+            source=EquityPositionSource.PURCHASE,
+            status=EquityPositionStatus.CLOSED,
+            from_position_index=None,
+            close_transaction_index=1,
+        )
+        # Also add a SHORT CALL position that would be covered if shares were counted
+        from app.services.matcher import MatchedLeg, MatchedPosition
+        from app.models.enums import OptionsPositionStatus, PositionDirection
+
+        open_pos = MatchedPosition(
+            underlying="NVDA",
+            strike=Decimal("220.00"),
+            expiry=date(2026, 6, 18),
+            option_type="CALL",
+            direction=PositionDirection.SHORT,
+            status=OptionsPositionStatus.OPEN,
+            legs=[MatchedLeg(transaction_index=0, leg_role=LegRole.OPEN, quantity=Decimal("1"))],
+        )
+        sto = self._make_options_txn()
+        active_txns = [(0, sto), (1, sto)]  # index 1 is a placeholder for the equity sell
+        match_result = MatchResult(positions=[open_pos], equity_lots=[closed_lot])
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        # Closed lot → shares NOT added to holdings → SHORT CALL NOT covered
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is False
+
+    def test_closed_position_has_two_legs(self) -> None:
+        """A fully closed position has exactly one OPEN + one CLOSE leg."""
+        from app.services.matcher import match_transactions
+        from app.models.transaction import Transaction
+
+        sto_txn = self._make_options_txn(
+            transaction_date=date(2026, 3, 15),
+        )
+        btc_txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 20),
+            transaction_date=date(2026, 3, 20),
+            symbol="NVDA",
+            action="Bought To Cover",
+            quantity=Decimal("1"),
+            commission=Decimal("0.65"),
+            amount=Decimal("-100.00"),
+            category=TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        )
+        btc_txn.option_type = "CALL"
+        btc_txn.strike = Decimal("220.00")
+        btc_txn.expiry = date(2026, 6, 18)
+        btc_txn.price = Decimal("1.00")
+
+        active_txns = [(0, sto_txn), (1, btc_txn)]
+        categories = [
+            TransactionCategory.OPTIONS_SELL_TO_OPEN,
+            TransactionCategory.OPTIONS_BUY_TO_CLOSE,
+        ]
+        tx_inputs = _build_transaction_inputs(active_txns, categories)
+        match_result = match_transactions(tx_inputs)
+
+        session = _make_session()
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        _persist_match_result(session, match_result, active_txns)
+
+        legs = [o for o in added if isinstance(o, OptionsPositionLeg)]
+        assert len(legs) == 2
+        roles = {leg.leg_role for leg in legs}
+        assert LegRole.OPEN in roles
+        assert LegRole.CLOSE in roles
+
+
+# ---------------------------------------------------------------------------
+# process_upload — matcher integration (end-to-end via mocked session)
+# ---------------------------------------------------------------------------
+
+
+class TestProcessUploadMatcherIntegration:
+    """End-to-end tests verifying matcher/P&L/covered-call wiring in process_upload."""
+
+    @pytest.mark.asyncio
+    async def test_options_open_creates_position(self) -> None:
+        """An options STO row causes an OptionsPosition to be added to the session."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_options_row())
+        await process_upload(session, filename="sto.csv", csv_content=csv_content)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].underlying == "NVDA"
+        assert positions[0].status == OptionsPositionStatus.OPEN
+
+    @pytest.mark.asyncio
+    async def test_options_open_creates_open_leg(self) -> None:
+        """An STO row produces one OptionsPositionLeg with OPEN role."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_options_row())
+        await process_upload(session, filename="sto.csv", csv_content=csv_content)
+
+        legs = [o for o in added if isinstance(o, OptionsPositionLeg)]
+        assert len(legs) == 1
+        assert legs[0].leg_role == LegRole.OPEN
+
+    @pytest.mark.asyncio
+    async def test_options_open_close_creates_closed_position_with_pnl(self) -> None:
+        """STO + BTC in same CSV produces a CLOSED position with realized_pnl set."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_options_row(), _options_close_row())
+        await process_upload(session, filename="open_close.csv", csv_content=csv_content)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        pos = positions[0]
+        assert pos.status == OptionsPositionStatus.CLOSED
+        assert pos.realized_pnl is not None
+
+    @pytest.mark.asyncio
+    async def test_equity_buy_creates_equity_position(self) -> None:
+        """An equity buy row produces one EquityPosition with PURCHASE source."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_equity_row())
+        await process_upload(session, filename="eq.csv", csv_content=csv_content)
+
+        equity_positions = [o for o in added if isinstance(o, EquityPosition)]
+        assert len(equity_positions) == 1
+        assert equity_positions[0].source == EquityPositionSource.PURCHASE
+
+    @pytest.mark.asyncio
+    async def test_short_call_with_equity_is_covered(self) -> None:
+        """SHORT CALL + 100 NVDA shares in same upload → is_covered_call=True."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        # 100 shares of NVDA, then a 1-contract SHORT CALL on NVDA
+        equity = _equity_row(quantity="100", price="200.00", amount="-20000.00")
+        csv_content = _make_csv(equity, _options_row())
+        await process_upload(session, filename="cc.csv", csv_content=csv_content)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is True
+
+    @pytest.mark.asyncio
+    async def test_short_call_without_equity_is_not_covered(self) -> None:
+        """SHORT CALL with no equity in same upload → is_covered_call=False."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_options_row())
+        await process_upload(session, filename="naked.csv", csv_content=csv_content)
+
+        positions = [o for o in added if isinstance(o, OptionsPosition)]
+        assert len(positions) == 1
+        assert positions[0].is_covered_call is False
+
+    @pytest.mark.asyncio
+    async def test_empty_csv_produces_no_positions(self) -> None:
+        """Empty CSV (header only) → no OptionsPosition, no EquityPosition objects."""
+        session = _make_session()
+        session.execute.return_value = _scalars_result([])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _PREAMBLE + _HEADER
+        await process_upload(session, filename="empty.csv", csv_content=csv_content)
+
+        assert [o for o in added if isinstance(o, OptionsPosition)] == []
+        assert [o for o in added if isinstance(o, EquityPosition)] == []
+
+    @pytest.mark.asyncio
+    async def test_duplicate_row_produces_no_position(self) -> None:
+        """A DUPLICATE row is skipped entirely — no position is created."""
+        from app.models.transaction import Transaction
+
+        existing_txn = Transaction(
+            raw_transaction_id=uuid.uuid4(),
+            upload_id=uuid.uuid4(),
+            broker_name="etrade",
+            trade_date=date(2026, 3, 15),
+            transaction_date=date(2026, 3, 15),
+            symbol="NVDA",
+            action="Sold Short",
+            quantity=Decimal("1"),
+            commission=Decimal("0.65"),
+            amount=Decimal("250.00"),
+            category=TransactionCategory.OPTIONS_SELL_TO_OPEN,
+        )
+        existing_txn.settlement_date = date(2026, 3, 17)
+        existing_txn.description = "CALL NVDA 06/18/26 220.00"
+        existing_txn.price = Decimal("2.50")
+
+        session = _make_session()
+        session.execute.return_value = _scalars_result([existing_txn])
+
+        added: list[object] = []
+        session.add.side_effect = added.append
+
+        csv_content = _make_csv(_options_row())
+        await process_upload(session, filename="dup.csv", csv_content=csv_content)
+
+        assert [o for o in added if isinstance(o, OptionsPosition)] == []
