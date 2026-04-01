@@ -89,7 +89,7 @@ export class TransactionsComponent implements OnInit {
     };
     if (this.symbol()) params.symbol = this.symbol();
     if (this.selectedCategories().length) params.category = this.selectedCategories();
-    if (this.selectedStatuses().length) params.dedup_status = this.selectedStatuses();
+    if (this.selectedStatuses().length) params.status = this.selectedStatuses();
     if (this.startDate()) params.start_date = this.startDate();
     if (this.endDate()) params.end_date = this.endDate();
 

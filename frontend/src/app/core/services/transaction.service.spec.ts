@@ -9,20 +9,24 @@ import { PaginatedResponse } from '../models/pagination.model';
 const mockTransaction: Transaction = {
   id: 'txn-1',
   upload_id: 'upload-1',
+  broker_name: 'etrade',
   trade_date: '2026-03-01',
   transaction_date: '2026-03-01',
   settlement_date: '2026-03-03',
-  activity_type: 'Sold Short',
-  description: 'CALL AAPL 03/15/26 200.00',
   symbol: 'AAPL',
+  option_symbol: null,
+  strike: null,
+  expiry: null,
+  option_type: null,
+  action: 'Sold Short',
+  description: 'CALL AAPL 03/15/26 200.00',
   quantity: '1',
   price: '5.00',
-  amount: '500.00',
   commission: '0.65',
+  amount: '500.00',
   category: 'OPTIONS_SELL_TO_OPEN',
-  is_internal_transfer: false,
-  dedup_status: 'UNIQUE',
-  created_at: '2026-03-15T10:00:00Z',
+  status: 'ACTIVE',
+  deleted_at: null,
 };
 
 const mockPaginatedResponse: PaginatedResponse<Transaction> = {
@@ -125,23 +129,23 @@ describe('TransactionService', () => {
       req.flush(mockPaginatedResponse);
     });
 
-    it('should serialize dedup_status as repeated query params', (done) => {
+    it('should serialize status as repeated query params', (done) => {
       service
-        .getTransactions({ dedup_status: ['DUPLICATE', 'PARSE_ERROR'] })
+        .getTransactions({ status: ['DUPLICATE', 'PARSE_ERROR'] })
         .subscribe({ next: () => done(), error: done.fail });
 
       const req = controller.expectOne((r) => r.url === '/api/v1/transactions');
-      expect(req.request.params.getAll('dedup_status')).toEqual(['DUPLICATE', 'PARSE_ERROR']);
+      expect(req.request.params.getAll('status')).toEqual(['DUPLICATE', 'PARSE_ERROR']);
       req.flush(mockPaginatedResponse);
     });
 
-    it('should omit dedup_status param when array is empty', (done) => {
+    it('should omit status param when array is empty', (done) => {
       service
-        .getTransactions({ dedup_status: [] })
+        .getTransactions({ status: [] })
         .subscribe({ next: () => done(), error: done.fail });
 
       const req = controller.expectOne((r) => r.url === '/api/v1/transactions');
-      expect(req.request.params.has('dedup_status')).toBe(false);
+      expect(req.request.params.has('status')).toBe(false);
       req.flush(mockPaginatedResponse);
     });
 

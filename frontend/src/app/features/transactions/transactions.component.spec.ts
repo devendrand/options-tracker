@@ -12,20 +12,24 @@ function makeTx(overrides: Partial<Transaction> = {}): Transaction {
   return {
     id: 'tx-1',
     upload_id: 'abcd1234-5678-90ef-ghij-klmnopqrstuv',
+    broker_name: 'etrade',
     trade_date: '2026-03-15',
     transaction_date: '2026-03-15',
     settlement_date: '2026-03-17',
-    activity_type: 'Sell to Open',
-    description: 'CALL AAPL 03/20/26 200.00',
     symbol: 'AAPL',
+    option_symbol: null,
+    strike: null,
+    expiry: null,
+    option_type: null,
+    action: 'Sold Short',
+    description: 'CALL AAPL 03/20/26 200.00',
     quantity: '1',
     price: '2.50',
-    amount: '250.00',
     commission: '0.65',
+    amount: '250.00',
     category: 'OPTIONS_SELL_TO_OPEN',
-    is_internal_transfer: false,
-    dedup_status: 'UNIQUE',
-    created_at: '2026-03-15T10:00:00Z',
+    status: 'ACTIVE',
+    deleted_at: null,
     ...overrides,
   };
 }
@@ -128,7 +132,7 @@ describe('TransactionsComponent', () => {
       expect(rows.length).toBe(3);
     });
 
-    it('7. should display trade_date, symbol, category label, amount, and dedup_status in the first row', () => {
+    it('7. should display trade_date, symbol, category label, amount, and status in the first row', () => {
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse()));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -138,7 +142,7 @@ describe('TransactionsComponent', () => {
       expect(text).toContain('AAPL');
       expect(text).toContain('Sell to Open');
       expect(text).toContain('250.00');
-      expect(text).toContain('UNIQUE');
+      expect(text).toContain('ACTIVE');
     });
 
     it('8. should show empty state when items is [] and total is 0', () => {
@@ -456,7 +460,7 @@ describe('TransactionsComponent', () => {
       expect(values).toEqual(DEDUP_STATUSES);
     });
 
-    it('30. should call getTransactions with dedup_status array when statuses are selected', () => {
+    it('30. should call getTransactions with status array when statuses are selected', () => {
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse()));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -467,11 +471,11 @@ describe('TransactionsComponent', () => {
         mockMultiSelectEvent(['DUPLICATE', 'PARSE_ERROR']),
       );
       expect(transactionServiceMock.getTransactions).toHaveBeenCalledWith(
-        expect.objectContaining({ dedup_status: ['DUPLICATE', 'PARSE_ERROR'] }),
+        expect.objectContaining({ status: ['DUPLICATE', 'PARSE_ERROR'] }),
       );
     });
 
-    it('31. should omit dedup_status param when status selection is cleared', () => {
+    it('31. should omit status param when status selection is cleared', () => {
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse()));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -480,7 +484,7 @@ describe('TransactionsComponent', () => {
 
       fixture.componentInstance.onStatusMultiChange(mockMultiSelectEvent([]));
       const call = transactionServiceMock.getTransactions.mock.calls[0][0];
-      expect(call).not.toHaveProperty('dedup_status');
+      expect(call).not.toHaveProperty('status');
     });
 
     it('32. should reset selectedStatuses to [] when resetFilters is called', () => {
@@ -532,7 +536,7 @@ describe('TransactionsComponent', () => {
 
   describe('row visual distinction', () => {
     it('36. should apply "row-duplicate" class to a DUPLICATE row', () => {
-      const tx = makeTx({ dedup_status: 'DUPLICATE' });
+      const tx = makeTx({ status: 'DUPLICATE' });
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse([tx], 1)));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -541,7 +545,7 @@ describe('TransactionsComponent', () => {
     });
 
     it('37. should apply "row-possible-duplicate" class to a POSSIBLE_DUPLICATE row', () => {
-      const tx = makeTx({ dedup_status: 'POSSIBLE_DUPLICATE' });
+      const tx = makeTx({ status: 'POSSIBLE_DUPLICATE' });
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse([tx], 1)));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -550,7 +554,7 @@ describe('TransactionsComponent', () => {
     });
 
     it('38. should apply "row-parse-error" class to a PARSE_ERROR row', () => {
-      const tx = makeTx({ dedup_status: 'PARSE_ERROR' });
+      const tx = makeTx({ status: 'PARSE_ERROR' });
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse([tx], 1)));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();
@@ -559,7 +563,7 @@ describe('TransactionsComponent', () => {
     });
 
     it('39. should not apply any special class to a UNIQUE row', () => {
-      const tx = makeTx({ dedup_status: 'UNIQUE' });
+      const tx = makeTx({ status: 'UNIQUE' });
       transactionServiceMock.getTransactions.mockReturnValue(of(makeResponse([tx], 1)));
       const fixture = TestBed.createComponent(TransactionsComponent);
       fixture.detectChanges();

@@ -18,20 +18,24 @@ export type TransactionCategory =
 export interface Transaction {
   id: string;
   upload_id: string;
+  broker_name: string;
   trade_date: string;
   transaction_date: string;
   settlement_date: string | null;
-  activity_type: string;
-  description: string;
-  symbol: string | null;
-  quantity: string | null;
+  symbol: string;
+  option_symbol: string | null;
+  strike: string | null;
+  expiry: string | null;
+  option_type: string | null;
+  action: string;
+  description: string | null;
+  quantity: string;
   price: string | null;
-  amount: string;
   commission: string;
+  amount: string;
   category: TransactionCategory;
-  is_internal_transfer: boolean;
-  dedup_status: string;
-  created_at: string;
+  status: string;
+  deleted_at: string | null;
 }
 
 export interface TransactionQueryParams {
@@ -39,7 +43,7 @@ export interface TransactionQueryParams {
   limit?: number;
   symbol?: string;
   category?: TransactionCategory[];
-  dedup_status?: string[];
+  status?: string[];
   start_date?: string;
   end_date?: string;
 }

@@ -25,8 +25,8 @@ export class TransactionService {
       if (params.category?.length) {
         params.category.forEach((c) => (httpParams = httpParams.append('category', c)));
       }
-      if (params.dedup_status?.length) {
-        params.dedup_status.forEach((s) => (httpParams = httpParams.append('dedup_status', s)));
+      if (params.status?.length) {
+        params.status.forEach((s) => (httpParams = httpParams.append('status', s)));
       }
       if (params.start_date !== undefined) {
         httpParams = httpParams.set('start_date', params.start_date);

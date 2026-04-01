@@ -57,17 +57,17 @@
     </thead>
     <tbody>
       @for (tx of transactions(); track tx.id) {
-        <tr data-testid="transaction-row" [class]="rowClass(tx.dedup_status)">
+        <tr data-testid="transaction-row" [class]="rowClass(tx.status)">
           <td>{{ tx.trade_date | relativeDate }}</td>
-          <td>{{ tx.activity_type }}</td>
-          <td>{{ tx.symbol ?? '—' }}</td>
+          <td>{{ tx.action }}</td>
+          <td>{{ tx.symbol || '—' }}</td>
           <td class="description-cell">{{ tx.description }}</td>
           <td>{{ tx.category | categoryLabel }}</td>
-          <td class="align-right">{{ tx.quantity ?? '—' }}</td>
+          <td class="align-right">{{ tx.quantity || '—' }}</td>
           <td class="align-right">{{ tx.price ? '$' + tx.price : '—' }}</td>
           <td class="align-right" [class.negative]="tx.amount.startsWith('-')">{{ tx.amount }}</td>
           <td class="align-right">{{ tx.commission }}</td>
-          <td><app-status-badge [status]="tx.dedup_status" /></td>
+          <td><app-status-badge [status]="tx.status" /></td>
           <td>
             <a data-testid="upload-link" [routerLink]="['/uploads', tx.upload_id]">{{
               tx.upload_id | slice: 0 : 8
