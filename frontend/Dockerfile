@@ -38,3 +38,26 @@ RUN npm install -g serve
 EXPOSE 4200
 
 CMD ["serve", "-s", "dist/frontend", "-l", "4200"]
+
+
+# ── Stage 3: nginx (for QA/PROD) ─────────────────────────────────────────────
+# Builds production bundle and serves via nginx with /api proxy to backend
+FROM node:lts-alpine AS nginx-build
+
+WORKDIR /app
+
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev
+
+COPY . .
+
+RUN npx ng build --configuration production
+
+FROM nginx:alpine AS nginx
+
+COPY --from=nginx-build /app/dist/options-tracker-ui/browser /usr/share/nginx/html
+COPY nginx.conf /etc/nginx/conf.d/default.conf
+
+EXPOSE 80
+
+CMD ["nginx", "-g", "daemon off;"]

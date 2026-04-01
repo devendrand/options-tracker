@@ -29,5 +29,10 @@ COPY . .
 
 EXPOSE 8000
 
+# Entrypoint runs alembic upgrade head before handing off to CMD
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]
+
 # Production-safe CMD — no --reload. Dev hot-reload is injected via docker-compose command: override.
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

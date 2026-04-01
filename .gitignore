@@ -1,5 +1,13 @@
 # Environment — never commit real credentials
 .env
+.env.dev
+.env.qa
+.env.prod
+
+# Deployment version markers
+.version-dev
+.version-qa
+.version-prod
 
 # Python
 __pycache__/
