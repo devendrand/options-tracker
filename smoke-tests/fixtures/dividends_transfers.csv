@@ -1,0 +1,11 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+02/15/26,Dividend,MSFT Dividend,MSFT,--,--,25.00,,02/16/26
+02/15/26,Dividend,MSFT Dividend Reinvested,MSFT,--,--,-25.00,,02/16/26
+03/01/26,Transfer,TRNSFR ACATS INCOMING,--,--,--,1000.00,,03/01/26
+03/01/26,Transfer,TRNSFR ACATS OUTGOING,--,--,--,-1000.00,,03/01/26

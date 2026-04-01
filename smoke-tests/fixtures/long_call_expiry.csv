@@ -1,0 +1,9 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+01/10/26,Bought To Open,CALL AAPL 03/20/26 200.000,AAPL,1,2.50,-250.00,0.65,01/12/26
+03/20/26,Option Expired,CALL AAPL 03/20/26 200.000,AAPL,1,,0.00,,03/20/26

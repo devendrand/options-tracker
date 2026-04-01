@@ -1,0 +1,9 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+04/01/26,Sold Short,CALL SPY 07/18/26 560.000,SPY,2,4.00,800.00,1.30,04/03/26
+04/15/26,Bought To Cover,CALL SPY 07/18/26 560.000,SPY,1,2.00,-200.00,0.65,04/17/26

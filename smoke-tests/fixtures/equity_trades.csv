@@ -1,0 +1,9 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+02/01/26,Bought,META,META,10,500.00,-5000.00,,02/03/26
+03/01/26,Sold,META,META,5,550.00,2750.00,,03/03/26

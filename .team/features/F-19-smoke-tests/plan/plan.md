@@ -1,8 +1,32 @@
 # F-19: End-to-End Smoke Test Suite — Plan
 
 **Owner:** devops-qa-smoke-tester
-**Status:** Draft
+**Status:** Done
 **Depends on:** F-12, F-13, F-07, F-08, F-09, F-10, F-11
+
+## Implementation Summary
+
+**Implemented:** 2026-04-01
+
+**Artifacts:**
+- `smoke-tests/fixtures/covered_call.csv` — STO + BTC + EQUITY_BUY (covered call detection, P&L=248.70)
+- `smoke-tests/fixtures/duplicate_upload.csv` — identical copy of covered_call.csv for dedup testing
+- `smoke-tests/fixtures/long_call_expiry.csv` — BTO + Option Expired (P&L=-250.65)
+- `smoke-tests/fixtures/assignment.csv` — STO PUT + Assigned (equity lot at strike)
+- `smoke-tests/fixtures/partial_close.csv` — STO 2 contracts + BTC 1 contract (PARTIALLY_CLOSED)
+- `smoke-tests/fixtures/equity_trades.csv` — EQUITY_BUY + EQUITY_SELL
+- `smoke-tests/fixtures/dividends_transfers.csv` — DRIP pair + TRNSFR pair (internal_transfer_count=2)
+- `smoke-tests/run_smoke_tests.py` — Python smoke test script (60+ assertions, 12 categories)
+- `smoke-tests/requirements.txt` — `requests>=2.31.0`
+- `.team/smoke-tests/README.md` — Execution guide, fixture reference, CI integration snippet
+
+**How to run:**
+```bash
+cd smoke-tests && pip install -r requirements.txt
+python run_smoke_tests.py [BASE_URL]
+```
+
+---
 
 ---
 

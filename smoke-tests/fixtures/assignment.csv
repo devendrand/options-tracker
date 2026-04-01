@@ -1,0 +1,9 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+03/15/26,Sold Short,PUT TSLA 04/17/26 250.000,TSLA,1,5.00,500.00,0.65,03/17/26
+04/17/26,Assigned,PUT TSLA 04/17/26 250.000,TSLA,1,0.00,0.00,,04/19/26

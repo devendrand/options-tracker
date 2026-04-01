@@ -1,0 +1,10 @@
+Brokerage,E*TRADE Securities LLC
+Account Number,xxxx-1234
+Account Name,Individual Brokerage Account
+Report Date,03/31/26
+Date Range,All
+,
+Transaction Date,Activity Type,Description,Symbol,Quantity,Price $,Amount $,Commission,Settlement Date
+01/15/26,Bought,NVDA,NVDA,200,100.00,-20000.00,,01/17/26
+02/01/26,Sold Short,CALL NVDA 06/18/26 220.000,NVDA,1,3.50,350.00,0.65,02/03/26
+02/15/26,Bought To Cover,CALL NVDA 06/18/26 220.000,NVDA,1,1.00,-100.00,0.65,02/17/26
