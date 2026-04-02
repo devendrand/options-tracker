@@ -698,3 +698,142 @@ class TestPnlRepository:
 
         assert len(results) == 1
         assert results[0].period_label == "2025"
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_group_by_underlying(self) -> None:
+        """group_by='underlying' labels rows by ticker symbol."""
+        session = self._make_pnl_session(
+            options_rows=[("NVDA", "400.00")],
+            equity_rows=[("NVDA", "100.00")],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(period="year", pnl_type="all", group_by="underlying")
+
+        assert len(results) == 1
+        assert results[0].period_label == "NVDA"
+        assert results[0].options_pnl == Decimal("400.00")
+        assert results[0].equity_pnl == Decimal("100.00")
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_group_by_period_underlying_year(self) -> None:
+        """group_by='period_underlying' produces composite 'YYYY | TICKER' labels."""
+        session = self._make_pnl_session(
+            options_rows=[("2026 | SPX", "300.00")],
+            equity_rows=[],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(
+            period="year", pnl_type="all", group_by="period_underlying"
+        )
+
+        assert len(results) == 1
+        assert results[0].period_label == "2026 | SPX"
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_group_by_period_underlying_month(self) -> None:
+        """group_by='period_underlying' with period='month' produces 'YYYY-MM | TICKER' labels."""
+        session = self._make_pnl_session(
+            options_rows=[("2026-03 | SPX", "150.00")],
+            equity_rows=[],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(
+            period="month", pnl_type="all", group_by="period_underlying"
+        )
+
+        assert len(results) == 1
+        assert results[0].period_label == "2026-03 | SPX"
+
+
+class TestPnlRepositoryGrpLabelHelpers:
+    """Unit tests for the pure SQL-expression builder helpers."""
+
+    def test_period_fmt_year(self) -> None:
+        repo = PnlRepository(MagicMock())
+        assert repo._period_fmt("year") == "YYYY"
+
+    def test_period_fmt_month(self) -> None:
+        repo = PnlRepository(MagicMock())
+        assert repo._period_fmt("month") == "YYYY-MM"
+
+    def test_build_grp_label_options_period(self) -> None:
+        """group_by='period' returns a to_char expression (not the underlying col)."""
+        repo = PnlRepository(MagicMock())
+        close_col = MagicMock(name="close_date")
+        underlying_col = MagicMock(name="underlying")
+        result = repo._build_grp_label_options(
+            period="year",
+            group_by="period",
+            close_date_col=close_col,
+            underlying_col=underlying_col,
+        )
+        # Should be a func.to_char expression, not the raw underlying column
+        assert result is not underlying_col
+
+    def test_build_grp_label_options_underlying(self) -> None:
+        """group_by='underlying' returns the underlying column directly."""
+        repo = PnlRepository(MagicMock())
+        close_col = MagicMock(name="close_date")
+        underlying_col = MagicMock(name="underlying")
+        result = repo._build_grp_label_options(
+            period="year",
+            group_by="underlying",
+            close_date_col=close_col,
+            underlying_col=underlying_col,
+        )
+        assert result is underlying_col
+
+    def test_build_grp_label_options_period_underlying(self) -> None:
+        """group_by='period_underlying' returns a func.concat expression."""
+        repo = PnlRepository(MagicMock())
+        close_col = MagicMock(name="close_date")
+        underlying_col = MagicMock(name="underlying")
+        result = repo._build_grp_label_options(
+            period="year",
+            group_by="period_underlying",
+            close_date_col=close_col,
+            underlying_col=underlying_col,
+        )
+        # Should not be the raw underlying or close_date columns
+        assert result is not underlying_col
+        assert result is not close_col
+
+    def test_build_grp_label_equity_period(self) -> None:
+        """group_by='period' returns a to_char expression for equity."""
+        repo = PnlRepository(MagicMock())
+        closed_at_col = MagicMock(name="closed_at")
+        symbol_col = MagicMock(name="symbol")
+        result = repo._build_grp_label_equity(
+            period="year",
+            group_by="period",
+            closed_at_col=closed_at_col,
+            symbol_col=symbol_col,
+        )
+        assert result is not symbol_col
+
+    def test_build_grp_label_equity_underlying(self) -> None:
+        """group_by='underlying' returns the symbol column directly for equity."""
+        repo = PnlRepository(MagicMock())
+        closed_at_col = MagicMock(name="closed_at")
+        symbol_col = MagicMock(name="symbol")
+        result = repo._build_grp_label_equity(
+            period="year",
+            group_by="underlying",
+            closed_at_col=closed_at_col,
+            symbol_col=symbol_col,
+        )
+        assert result is symbol_col
+
+    def test_build_grp_label_equity_period_underlying(self) -> None:
+        """group_by='period_underlying' returns a func.concat expression for equity."""
+        repo = PnlRepository(MagicMock())
+        closed_at_col = MagicMock(name="closed_at")
+        symbol_col = MagicMock(name="symbol")
+        result = repo._build_grp_label_equity(
+            period="year",
+            group_by="period_underlying",
+            closed_at_col=closed_at_col,
+            symbol_col=symbol_col,
+        )
+        assert result is not symbol_col
+        assert result is not closed_at_col

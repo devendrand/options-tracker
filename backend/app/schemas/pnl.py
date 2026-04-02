@@ -20,4 +20,5 @@ class PnlSummaryResponse(BaseModel):
     """Response envelope for the P&L summary endpoint."""
 
     period: str
+    group_by: str = "period"
     items: list[PnlPeriodResponse]

@@ -453,6 +453,7 @@ class TestGetPnlSummary:
         data = response.json()
         assert data["period"] == "year"
         assert data["items"] == []
+        assert data["group_by"] == "period"
 
     def test_get_pnl_summary_month_options(self, api_client: TestClient) -> None:
         from app.schemas.pnl import PnlPeriodResponse
@@ -472,6 +473,7 @@ class TestGetPnlSummary:
         assert data["period"] == "month"
         assert len(data["items"]) == 1
         assert data["items"][0]["period_label"] == "2026-01"
+        assert data["group_by"] == "period"
 
     def test_get_pnl_summary_with_underlying(self, api_client: TestClient) -> None:
         with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
@@ -481,6 +483,7 @@ class TestGetPnlSummary:
         assert response.status_code == 200
         data = response.json()
         assert data["period"] == "year"
+        assert data["group_by"] == "period"
 
     def test_get_pnl_summary_all_type(self, api_client: TestClient) -> None:
         with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
@@ -488,3 +491,229 @@ class TestGetPnlSummary:
             response = api_client.get("/api/v1/pnl/summary?type=all")
 
         assert response.status_code == 200
+        assert response.json()["group_by"] == "period"
+
+    def test_get_pnl_summary_default_includes_group_by_field(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            MockRepo.return_value.get_pnl_summary = AsyncMock(return_value=[])
+            response = api_client.get("/api/v1/pnl/summary")
+
+        assert response.status_code == 200
+        assert response.json()["group_by"] == "period"
+
+    def test_get_pnl_summary_group_by_underlying(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            MockRepo.return_value.get_pnl_summary = AsyncMock(return_value=[])
+            response = api_client.get("/api/v1/pnl/summary?group_by=underlying")
+
+        assert response.status_code == 200
+        assert response.json()["group_by"] == "underlying"
+
+    def test_get_pnl_summary_group_by_period_underlying(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            MockRepo.return_value.get_pnl_summary = AsyncMock(return_value=[])
+            response = api_client.get("/api/v1/pnl/summary?group_by=period_underlying")
+
+        assert response.status_code == 200
+        assert response.json()["group_by"] == "period_underlying"
+
+    def test_get_pnl_summary_invalid_group_by_returns_422(self, api_client: TestClient) -> None:
+        response = api_client.get("/api/v1/pnl/summary?group_by=invalid")
+        assert response.status_code == 422
+
+    def test_get_pnl_summary_group_by_underlying_ignores_period(
+        self, api_client: TestClient
+    ) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=[])
+            MockRepo.return_value.get_pnl_summary = mock_get
+            response = api_client.get("/api/v1/pnl/summary?group_by=underlying&period=month")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["group_by"] == "underlying"
+        mock_get.assert_awaited_once_with(
+            period="month",
+            pnl_type="all",
+            underlying=None,
+            group_by="underlying",
+        )
+
+
+class TestGetPnlPositions:
+    """Tests for GET /api/v1/pnl/positions."""
+
+    def _make_opts_pos(self, **overrides: object) -> SimpleNamespace:
+        return _opts_pos_ns(
+            status=OptionsPositionStatus.CLOSED,
+            realized_pnl=Decimal("150.00"),
+            **overrides,
+        )
+
+    def _make_eq_pos(self, **overrides: object) -> SimpleNamespace:
+        return _eq_pos_ns(
+            status=EquityPositionStatus.CLOSED,
+            equity_realized_pnl=Decimal("75.00"),
+            closed_at=datetime(2026, 3, 1, 0, 0, 0),
+            **overrides,
+        )
+
+    def test_pnl_positions_missing_period_label_returns_422(
+        self, api_client: TestClient
+    ) -> None:
+        response = api_client.get("/api/v1/pnl/positions")
+        assert response.status_code == 422
+
+    def test_pnl_positions_group_by_period(self, api_client: TestClient) -> None:
+        opts_pos = self._make_opts_pos()
+        eq_pos = self._make_eq_pos()
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            MockRepo.return_value.get_positions_for_bucket = AsyncMock(
+                return_value=(1, [opts_pos], 1, [eq_pos])
+            )
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&group_by=period&period=year"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 2
+        assert data["offset"] == 0
+        assert data["limit"] == 100
+        assert len(data["options_items"]) == 1
+        assert len(data["equity_items"]) == 1
+        assert data["options_items"][0]["underlying"] == "NVDA"
+        assert data["equity_items"][0]["symbol"] == "AAPL"
+
+    def test_pnl_positions_group_by_underlying(self, api_client: TestClient) -> None:
+        opts_pos = self._make_opts_pos()
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(1, [opts_pos], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=NVDA&group_by=underlying"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["total"] == 1
+        assert len(data["options_items"]) == 1
+        assert data["equity_items"] == []
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="underlying",
+            period_label="NVDA",
+            underlying=None,
+            pnl_type="all",
+            offset=0,
+            limit=100,
+        )
+
+    def test_pnl_positions_group_by_underlying_ignores_period(
+        self, api_client: TestClient
+    ) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=SPX&group_by=underlying&period=month"
+            )
+
+        assert response.status_code == 200
+        # period=month is passed through to repo; repo is responsible for ignoring it
+        mock_get.assert_awaited_once_with(
+            period="month",
+            group_by="underlying",
+            period_label="SPX",
+            underlying=None,
+            pnl_type="all",
+            offset=0,
+            limit=100,
+        )
+
+    def test_pnl_positions_type_options_only(self, api_client: TestClient) -> None:
+        opts_pos = self._make_opts_pos()
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(1, [opts_pos], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&type=options"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["options_items"]) == 1
+        assert data["equity_items"] == []
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying=None,
+            pnl_type="options",
+            offset=0,
+            limit=100,
+        )
+
+    def test_pnl_positions_type_equity_only(self, api_client: TestClient) -> None:
+        eq_pos = self._make_eq_pos()
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 1, [eq_pos]))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&type=equity"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["options_items"] == []
+        assert len(data["equity_items"]) == 1
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying=None,
+            pnl_type="equity",
+            offset=0,
+            limit=100,
+        )
+
+    def test_pnl_positions_with_underlying_filter(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&underlying=SPX"
+            )
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying="SPX",
+            pnl_type="all",
+            offset=0,
+            limit=100,
+        )
+
+    def test_pnl_positions_pagination(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&offset=50&limit=25"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["offset"] == 50
+        assert data["limit"] == 25
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying=None,
+            pnl_type="all",
+            offset=50,
+            limit=25,
+        )
