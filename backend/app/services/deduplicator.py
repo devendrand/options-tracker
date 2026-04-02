@@ -63,12 +63,16 @@ _CompositeKey = tuple[
     Decimal,  # commission
 ]
 
-# The 4-field partial key for POSSIBLE_DUPLICATE detection.
+# The 5-field partial key for POSSIBLE_DUPLICATE detection.
+# Includes description to distinguish different option contracts on the same
+# underlying (e.g. two Option Expired rows with different strikes but the
+# same trade_date, symbol, quantity, and amount=0).
 _PartialKey = tuple[
     date | None,  # trade_date
     str | None,  # symbol
     Decimal | None,  # quantity
     Decimal | None,  # amount
+    str,  # description
 ]
 
 
@@ -126,9 +130,10 @@ def _partial_key(
     symbol: str | None,
     quantity: Decimal | None,
     amount: Decimal | None,
+    description: str,
 ) -> _PartialKey:
-    """Build the 4-field partial deduplication key tuple."""
-    return (trade_date, symbol, quantity, amount)
+    """Build the 5-field partial deduplication key tuple."""
+    return (trade_date, symbol, quantity, amount, description)
 
 
 def _row_composite_key(row: ParsedRow) -> _CompositeKey:
@@ -148,12 +153,13 @@ def _row_composite_key(row: ParsedRow) -> _CompositeKey:
 
 
 def _row_partial_key(row: ParsedRow) -> _PartialKey:
-    """Extract the 4-field partial key from a :class:`ParsedRow`."""
+    """Extract the 5-field partial key from a :class:`ParsedRow`."""
     return _partial_key(
         trade_date=row.trade_date,
         symbol=row.symbol,
         quantity=row.quantity,
         amount=row.amount,
+        description=row.description,
     )
 
 
@@ -174,12 +180,13 @@ def _existing_composite_key(tx: dict[str, object]) -> _CompositeKey:
 
 
 def _existing_partial_key(tx: dict[str, object]) -> _PartialKey:
-    """Extract the 4-field partial key from an existing-transaction dict."""
+    """Extract the 5-field partial key from an existing-transaction dict."""
     return _partial_key(
         trade_date=tx.get("trade_date"),  # type: ignore[arg-type]
         symbol=tx.get("symbol"),  # type: ignore[arg-type]
         quantity=tx.get("quantity"),  # type: ignore[arg-type]
         amount=tx.get("amount"),  # type: ignore[arg-type]
+        description=str(tx.get("description", "")),
     )
 
 

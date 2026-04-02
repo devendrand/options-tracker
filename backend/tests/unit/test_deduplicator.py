@@ -173,23 +173,27 @@ class TestExactMatchDuplicate:
         assert results[0].status == RawTransactionStatus.ACTIVE
 
     def test_different_activity_type_falls_to_possible_duplicate(self) -> None:
-        """Different activity_type but same 4-field partial key → POSSIBLE_DUPLICATE."""
+        """Different activity_type but same 5-field partial key → POSSIBLE_DUPLICATE."""
         existing = [_make_existing(activity_type="Bought To Cover")]
         results = deduplicate_rows([_make_row(activity_type="Sold Short")], existing)
-        # trade_date + symbol + quantity + amount still match → POSSIBLE_DUPLICATE
+        # trade_date + symbol + quantity + amount + description still match → POSSIBLE_DUPLICATE
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
     def test_different_commission_falls_to_possible_duplicate(self) -> None:
-        """Different commission but same 4-field partial key → POSSIBLE_DUPLICATE."""
+        """Different commission but same 5-field partial key → POSSIBLE_DUPLICATE."""
         existing = [_make_existing(commission=Decimal("1.30"))]
         results = deduplicate_rows([_make_row(commission=Decimal("0.65"))], existing)
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
-    def test_different_description_falls_to_possible_duplicate(self) -> None:
-        """Different description but same 4-field partial key → POSSIBLE_DUPLICATE."""
+    def test_different_description_is_active(self) -> None:
+        """Different description breaks the 5-field partial key → ACTIVE.
+
+        Description is part of the partial key to distinguish different option
+        contracts on the same underlying (e.g. two expirations at different strikes).
+        """
         existing = [_make_existing(description="PUT NVDA 06/18/26 220.00")]
         results = deduplicate_rows([_make_row(description="CALL NVDA 06/18/26 220.00")], existing)
-        assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
+        assert results[0].status == RawTransactionStatus.ACTIVE
 
     def test_different_trade_date_is_active(self) -> None:
         """Different trade_date breaks both composite and partial keys → ACTIVE."""
@@ -198,21 +202,21 @@ class TestExactMatchDuplicate:
         assert results[0].status == RawTransactionStatus.ACTIVE
 
     def test_different_transaction_date_falls_to_possible_duplicate(self) -> None:
-        """Different transaction_date but same 4-field partial key → POSSIBLE_DUPLICATE."""
+        """Different transaction_date but same 5-field partial key → POSSIBLE_DUPLICATE."""
         existing = [_make_existing(transaction_date=date(2026, 1, 16))]
         results = deduplicate_rows([_make_row(transaction_date=date(2026, 1, 15))], existing)
-        # 4-field partial key (trade_date+symbol+quantity+amount) still matches
+        # 5-field partial key (trade_date+symbol+quantity+amount+description) still matches
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
 
 # ---------------------------------------------------------------------------
-# Test: POSSIBLE_DUPLICATE — partial match (4-field: trade_date+symbol+qty+amount)
+# Test: POSSIBLE_DUPLICATE — partial match (5-field: trade_date+symbol+qty+amount+description)
 # ---------------------------------------------------------------------------
 
 
 class TestPartialMatchPossibleDuplicate:
     def test_partial_match_different_price_is_possible_duplicate(self) -> None:
-        """Same 4-field partial key but different price → POSSIBLE_DUPLICATE."""
+        """Same 5-field partial key but different price → POSSIBLE_DUPLICATE."""
         existing = [_make_existing(price=Decimal("3.00"))]
         results = deduplicate_rows([_make_row(price=Decimal("2.50"))], existing)
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
@@ -220,14 +224,15 @@ class TestPartialMatchPossibleDuplicate:
 
     def test_partial_match_different_commission_is_possible_duplicate(self) -> None:
         existing = [_make_existing(commission=Decimal("1.30"))]
-        # Change commission but keep all 4 partial-key fields the same
+        # Change commission but keep all 5 partial-key fields the same
         results = deduplicate_rows([_make_row(commission=Decimal("0.65"))], existing)
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
-    def test_partial_match_different_description_is_possible_duplicate(self) -> None:
+    def test_partial_match_different_description_is_active(self) -> None:
+        """Different description breaks the partial key → ACTIVE."""
         existing = [_make_existing(description="DIFFERENT DESCRIPTION")]
         results = deduplicate_rows([_make_row()], existing)
-        assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
+        assert results[0].status == RawTransactionStatus.ACTIVE
 
     def test_partial_match_different_activity_type_is_possible_duplicate(self) -> None:
         existing = [_make_existing(activity_type="Bought To Cover")]
@@ -235,7 +240,7 @@ class TestPartialMatchPossibleDuplicate:
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
     def test_no_partial_match_is_active(self) -> None:
-        """If neither 10-field nor 4-field key matches, row is ACTIVE."""
+        """If neither 10-field nor 5-field key matches, row is ACTIVE."""
         existing = [_make_existing(symbol="AAPL", amount=Decimal("500.00"))]
         results = deduplicate_rows([_make_row(symbol="NVDA", amount=Decimal("250.00"))], existing)
         assert results[0].status == RawTransactionStatus.ACTIVE
@@ -269,7 +274,7 @@ class TestNullSafeMatching:
     def test_null_price_does_not_match_non_null_price(self) -> None:
         existing = [_make_existing(price=Decimal("2.50"))]
         results = deduplicate_rows([_make_row(price=None)], existing)
-        # Price differs → partial key (no price) matches → POSSIBLE_DUPLICATE
+        # Price differs → partial key (no price in partial) matches → POSSIBLE_DUPLICATE
         assert results[0].status == RawTransactionStatus.POSSIBLE_DUPLICATE
 
     def test_null_symbol_matches_null_symbol(self) -> None:
@@ -328,12 +333,46 @@ class TestWithinBatchDeduplication:
         assert results[2].status == RawTransactionStatus.DUPLICATE
 
     def test_within_batch_partial_match_is_possible_duplicate(self) -> None:
-        """Within-batch partial match (4-field) → POSSIBLE_DUPLICATE."""
+        """Within-batch partial match (5-field) → POSSIBLE_DUPLICATE."""
         row1 = _make_row(commission=Decimal("0.65"))
-        row2 = _make_row(commission=Decimal("1.30"))  # same 4-field, different commission
+        row2 = _make_row(commission=Decimal("1.30"))  # same 5-field, different commission
         results = deduplicate_rows([row1, row2], [])
         assert results[0].status == RawTransactionStatus.ACTIVE
         assert results[1].status == RawTransactionStatus.POSSIBLE_DUPLICATE
+
+    def test_within_batch_different_strikes_both_active(self) -> None:
+        """Two Option Expired rows for different strikes must both be ACTIVE.
+
+        Regression: with a 4-field partial key (trade_date+symbol+qty+amount),
+        two expirations on the same underlying with the same trade_date, qty=1,
+        and amount=0 would collide, causing the second to be falsely flagged as
+        POSSIBLE_DUPLICATE.  Adding description to the partial key prevents this.
+        """
+        row1 = _make_row(
+            trade_date=date(2026, 2, 2),
+            transaction_date=date(2026, 2, 2),
+            activity_type="Option Expired",
+            description="PUT  SPXW   01/30/26  6845.000",
+            symbol="SPX",
+            quantity=Decimal("1"),
+            price=Decimal("0.00"),
+            amount=Decimal("0"),
+            commission=Decimal("0.00"),
+        )
+        row2 = _make_row(
+            trade_date=date(2026, 2, 2),
+            transaction_date=date(2026, 2, 2),
+            activity_type="Option Expired",
+            description="PUT  SPXW   01/30/26  6840.000",
+            symbol="SPX",
+            quantity=Decimal("1"),
+            price=Decimal("0.00"),
+            amount=Decimal("0"),
+            commission=Decimal("0.00"),
+        )
+        results = deduplicate_rows([row1, row2], [])
+        assert results[0].status == RawTransactionStatus.ACTIVE
+        assert results[1].status == RawTransactionStatus.ACTIVE
 
 
 # ---------------------------------------------------------------------------
@@ -350,11 +389,12 @@ class TestMixedResults:
         existing_a = _make_existing(upload_id=upload_id, symbol="NVDA")
         row_a = _make_row(symbol="NVDA")
 
-        # Row B — partial match on 4-field key, different description → POSSIBLE_DUPLICATE
+        # Row B — partial match on 5-field key, different commission → POSSIBLE_DUPLICATE
+        # (same description so partial key matches, different commission breaks composite key)
         existing_b = _make_existing(
-            symbol="AAPL", description="DIFFERENT", amount=Decimal("100.00")
+            symbol="AAPL", amount=Decimal("100.00"), commission=Decimal("1.30")
         )
-        row_b = _make_row(symbol="AAPL", amount=Decimal("100.00"))
+        row_b = _make_row(symbol="AAPL", amount=Decimal("100.00"), commission=Decimal("0.65"))
 
         # Row C — completely new → ACTIVE
         row_c = _make_row(
