@@ -3,10 +3,12 @@ import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { PnlService } from './pnl.service';
 import { API_BASE_URL } from '../api.config';
-import { PnlSummary, PnlQueryParams } from '../models/pnl.model';
+import { PnlSummary, PnlQueryParams, PnlGroupBy, PnlPositionsParams } from '../models/pnl.model';
+import { PositionListResponse } from '../models/position.model';
 
 const mockPnlSummary: PnlSummary = {
   period: 'month',
+  group_by: 'period',
   items: [
     { period_label: '2026-01', options_pnl: '500.00', equity_pnl: '0.00', total_pnl: '500.00' },
     { period_label: '2026-02', options_pnl: '750.00', equity_pnl: '0.00', total_pnl: '750.00' },
@@ -106,6 +108,122 @@ describe('PnlService', () => {
       expect(req.request.params.has('period')).toBe(false);
       expect(req.request.params.get('start_date')).toBe('2026-01-01');
       req.flush(mockPnlSummary);
+    });
+
+    it('should serialize group_by query param', (done) => {
+      const params: PnlQueryParams = { group_by: 'underlying' as PnlGroupBy };
+
+      service.getSummary(params).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.get('group_by')).toBe('underlying');
+      req.flush(mockPnlSummary);
+    });
+
+    it('should serialize group_by=period_underlying query param', (done) => {
+      service.getSummary({ group_by: 'period_underlying' }).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.get('group_by')).toBe('period_underlying');
+      req.flush(mockPnlSummary);
+    });
+
+    it('should omit group_by when undefined', (done) => {
+      service.getSummary({ period: 'year' }).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.has('group_by')).toBe(false);
+      req.flush(mockPnlSummary);
+    });
+  });
+
+  describe('getPositionsForBucket()', () => {
+    const mockPositionListResponse: PositionListResponse = {
+      total: 1,
+      offset: 0,
+      limit: 100,
+      options_items: [
+        {
+          id: 'pos-1',
+          underlying: 'SPX',
+          option_symbol: 'SPX 2026-01-30 PUT 100',
+          strike: '100',
+          expiry: '2026-01-30',
+          option_type: 'PUT',
+          direction: 'LONG',
+          status: 'CLOSED',
+          realized_pnl: '500.00',
+          is_covered_call: false,
+        },
+      ],
+      equity_items: [],
+    };
+
+    it('should call GET /api/v1/pnl/positions with required params', (done) => {
+      const params: PnlPositionsParams = {
+        period: 'year',
+        group_by: 'period',
+        period_label: '2026',
+      };
+
+      service.getPositionsForBucket(params).subscribe({
+        next: (response) => {
+          expect(response).toEqual(mockPositionListResponse);
+          done();
+        },
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/positions');
+      expect(req.request.method).toBe('GET');
+      expect(req.request.params.get('period')).toBe('year');
+      expect(req.request.params.get('group_by')).toBe('period');
+      expect(req.request.params.get('period_label')).toBe('2026');
+      req.flush(mockPositionListResponse);
+    });
+
+    it('should include underlying param when provided', (done) => {
+      const params: PnlPositionsParams = {
+        period: 'month',
+        group_by: 'underlying',
+        period_label: 'SPX',
+        underlying: 'SPX',
+      };
+
+      service.getPositionsForBucket(params).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/positions');
+      expect(req.request.params.get('underlying')).toBe('SPX');
+      req.flush(mockPositionListResponse);
+    });
+
+    it('should omit underlying param when not provided', (done) => {
+      const params: PnlPositionsParams = {
+        period: 'year',
+        group_by: 'period',
+        period_label: '2026',
+      };
+
+      service.getPositionsForBucket(params).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/positions');
+      expect(req.request.params.has('underlying')).toBe(false);
+      req.flush(mockPositionListResponse);
     });
   });
 });

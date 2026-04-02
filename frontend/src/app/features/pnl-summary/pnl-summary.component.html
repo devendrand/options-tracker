@@ -6,6 +6,7 @@
         name="period"
         value="year"
         [checked]="period() === 'year'"
+        [disabled]="periodDisabled()"
         (change)="setPeriod('year')"
         data-testid="period-year"
       />
@@ -17,10 +18,36 @@
         name="period"
         value="month"
         [checked]="period() === 'month'"
+        [disabled]="periodDisabled()"
         (change)="setPeriod('month')"
         data-testid="period-month"
       />
       Month
+    </label>
+  </div>
+
+  <div data-testid="group-by-toggle" class="group-by-toggle">
+    <label>
+      <input
+        type="radio"
+        name="groupBy"
+        value="period"
+        [checked]="groupBy() === 'period'"
+        (change)="setGroupBy('period')"
+        data-testid="group-by-period"
+      />
+      Period
+    </label>
+    <label>
+      <input
+        type="radio"
+        name="groupBy"
+        value="underlying"
+        [checked]="groupBy() === 'underlying'"
+        (change)="setGroupBy('underlying')"
+        data-testid="group-by-underlying"
+      />
+      Underlying
     </label>
   </div>
 
@@ -49,24 +76,167 @@
   <div class="total-pnl" data-testid="total-pnl" [class]="pnlClass(totalPnl())">
     Total P&L: {{ totalPnl() }}
   </div>
-  <table data-testid="pnl-table" class="pnl-table">
-    <thead>
-      <tr>
-        <th>Period</th>
-        <th class="align-right">Options P&L</th>
-        <th class="align-right">Equity P&L</th>
-        <th class="align-right">Total P&L</th>
-      </tr>
-    </thead>
-    <tbody>
-      @for (entry of summary()!.items; track entry.period_label) {
-        <tr data-testid="pnl-row">
-          <td>{{ formatPeriodLabel(entry.period_label, period()) }}</td>
-          <td class="align-right" [class]="pnlClass(entry.options_pnl)">{{ entry.options_pnl }}</td>
-          <td class="align-right" [class]="pnlClass(entry.equity_pnl)">{{ entry.equity_pnl }}</td>
-          <td class="align-right" [class]="pnlClass(entry.total_pnl)">{{ entry.total_pnl }}</td>
-        </tr>
-      }
-    </tbody>
-  </table>
+  <div data-testid="pnl-cards" class="pnl-cards">
+    @for (entry of summary()!.items; track entry.period_label) {
+      <div
+        class="pnl-card"
+        [class.pnl-card--expanded]="expandedLabel() === entry.period_label"
+        data-testid="pnl-card"
+      >
+        <button
+          class="pnl-card__header"
+          data-testid="pnl-card-expand-btn"
+          (click)="toggleCard(entry.period_label)"
+          type="button"
+        >
+          <div data-testid="pnl-card-label">
+            <span class="pnl-card__header-label">{{ firstColumnHeader() }}</span>
+            {{ formatPeriodLabel(entry.period_label, period(), groupBy()) }}
+          </div>
+          <span class="pnl-card__expand-icon" aria-hidden="true">
+            {{ expandedLabel() === entry.period_label ? '▲' : '▼' }}
+          </span>
+        </button>
+        <div class="pnl-card__body">
+          <div class="pnl-card__metric">
+            <span class="pnl-card__metric-label">Options P&L</span>
+            <span
+              class="pnl-card__metric-value"
+              data-testid="pnl-card-options"
+              [class]="pnlClass(entry.options_pnl)"
+              >{{ entry.options_pnl }}</span
+            >
+          </div>
+          <div class="pnl-card__metric">
+            <span class="pnl-card__metric-label">Equity P&L</span>
+            <span
+              class="pnl-card__metric-value"
+              data-testid="pnl-card-equity"
+              [class]="pnlClass(entry.equity_pnl)"
+              >{{ entry.equity_pnl }}</span
+            >
+          </div>
+          <div class="pnl-card__metric pnl-card__metric--total">
+            <span class="pnl-card__metric-label">Total P&L</span>
+            <span
+              class="pnl-card__metric-value"
+              data-testid="pnl-card-total"
+              [class]="pnlClass(entry.total_pnl)"
+              >{{ entry.total_pnl }}</span
+            >
+          </div>
+        </div>
+
+        @if (expandedLabel() === entry.period_label) {
+          <div class="pnl-card__positions">
+            @if (bucketLoading()) {
+              <div data-testid="bucket-loading" class="bucket-loading">
+                <p>Loading positions...</p>
+              </div>
+            } @else if (bucketError()) {
+              <div data-testid="bucket-error" class="bucket-error">
+                <p>{{ bucketError() }}</p>
+                <button
+                  data-testid="bucket-retry-btn"
+                  (click)="loadBucketPositions(entry.period_label)"
+                  type="button"
+                >
+                  Retry
+                </button>
+              </div>
+            } @else if (
+              (bucketPositions()?.options_items?.length ?? 0) === 0 &&
+              (bucketPositions()?.equity_items?.length ?? 0) === 0
+            ) {
+              <div data-testid="bucket-empty" class="bucket-empty">
+                <p>No positions found for this period.</p>
+              </div>
+            } @else {
+              @if ((bucketPositions()?.options_items?.length ?? 0) > 0) {
+                <table class="bucket-positions-table" data-testid="bucket-options-table">
+                  <thead>
+                    <tr>
+                      <th>Underlying</th>
+                      <th>Symbol</th>
+                      <th>Type</th>
+                      <th>Direction</th>
+                      <th>Strike</th>
+                      <th>Expiry</th>
+                      <th>Status</th>
+                      <th class="align-right">P&L</th>
+                      <th></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (pos of bucketPositions()!.options_items; track pos.id) {
+                      <tr data-testid="bucket-pos-row">
+                        <td>{{ pos.underlying }}</td>
+                        <td>{{ pos.option_symbol }}</td>
+                        <td>{{ pos.option_type }}</td>
+                        <td>{{ pos.direction }}</td>
+                        <td>{{ pos.strike }}</td>
+                        <td>{{ pos.expiry | date: 'mediumDate' }}</td>
+                        <td><app-status-badge [status]="pos.status" /></td>
+                        <td
+                          class="align-right"
+                          data-testid="bucket-pos-pnl"
+                          [class]="pnlClass(pos.realized_pnl ?? '0')"
+                        >
+                          {{ pos.realized_pnl ?? '—' }}
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            data-testid="bucket-expand-btn"
+                            (click)="togglePositionDrawer(pos.id)"
+                          >
+                            Legs
+                          </button>
+                        </td>
+                      </tr>
+                      @if (isPositionExpanded(pos.id)) {
+                        <tr>
+                          <td colspan="9">
+                            <app-position-drawer [positionId]="pos.id" />
+                          </td>
+                        </tr>
+                      }
+                    }
+                  </tbody>
+                </table>
+              }
+              @if ((bucketPositions()?.equity_items?.length ?? 0) > 0) {
+                <table class="bucket-positions-table" data-testid="bucket-equity-table">
+                  <thead>
+                    <tr>
+                      <th>Symbol</th>
+                      <th>Quantity</th>
+                      <th>Cost Basis/Share</th>
+                      <th>Source</th>
+                      <th>Status</th>
+                      <th class="align-right">P&L</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    @for (eq of bucketPositions()!.equity_items; track eq.id) {
+                      <tr data-testid="bucket-equity-row">
+                        <td>{{ eq.symbol }}</td>
+                        <td>{{ eq.quantity }}</td>
+                        <td>{{ eq.cost_basis_per_share }}</td>
+                        <td>{{ eq.source }}</td>
+                        <td><app-status-badge [status]="eq.status" /></td>
+                        <td class="align-right" [class]="pnlClass(eq.equity_realized_pnl ?? '0')">
+                          {{ eq.equity_realized_pnl ?? '—' }}
+                        </td>
+                      </tr>
+                    }
+                  </tbody>
+                </table>
+              }
+            }
+          </div>
+        }
+      </div>
+    }
+  </div>
 }
