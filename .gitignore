@@ -42,6 +42,9 @@ frontend/.angular/
 # Logs
 *.log
 
+# Claude Code local overrides
+.claude/settings.local.json
+
 # IDE
 .idea/
 .vscode/
