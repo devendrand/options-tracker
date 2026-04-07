@@ -39,6 +39,9 @@ frontend/.angular/
 # macOS
 .DS_Store
 
+# Logs
+*.log
+
 # IDE
 .idea/
 .vscode/
