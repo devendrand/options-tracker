@@ -63,7 +63,11 @@ async def list_positions(
             limit=limit,
         )
         total += opts_total
-        options_items = [OptionsPositionResponse.model_validate(r) for r in opts_rows]
+        for pos, opened_at, closed_at in opts_rows:
+            resp = OptionsPositionResponse.model_validate(pos)
+            resp.opened_at = opened_at
+            resp.closed_at = closed_at
+            options_items.append(resp)
 
     if asset_type in ("equity", "all"):
         eq_total, eq_rows = await repo.list_equity_positions(
@@ -91,11 +95,14 @@ async def get_position_detail(
 ) -> OptionsPositionDetailResponse:
     """Return an options position with all legs."""
     repo = PositionRepository(db)
-    position = await repo.get_options_position_detail(position_id)
-    if position is None:
+    result = await repo.get_options_position_detail(position_id)
+    if result is None:
         raise HTTPException(status_code=404, detail="Position not found")
+    position, opened_at, closed_at = result
 
     detail = OptionsPositionDetailResponse.model_validate(position)
+    detail.opened_at = opened_at
+    detail.closed_at = closed_at
     detail.legs = [OptionsPositionLegResponse.model_validate(leg) for leg in position.legs]
     detail.total_realized_pnl = position.realized_pnl
     return detail

@@ -37,11 +37,11 @@ describe('App', () => {
     expect(brand.textContent.trim()).toBe('Options Tracker');
   });
 
-  it('should render all six navigation links', () => {
+  it('should render all four navigation links', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const links = fixture.nativeElement.querySelectorAll('.app-nav__links a');
-    expect(links.length).toBe(6);
+    expect(links.length).toBe(4);
   });
 
   it('should have correct href for Dashboard link', () => {
@@ -52,12 +52,11 @@ describe('App', () => {
     expect(link.getAttribute('href')).toBe('/dashboard');
   });
 
-  it('should have correct href for Upload link', () => {
+  it('should not render Upload nav link', () => {
     const fixture = TestBed.createComponent(App);
     fixture.detectChanges();
     const link = fixture.nativeElement.querySelector('[data-testid="nav-upload"]');
-    expect(link).toBeTruthy();
-    expect(link.getAttribute('href')).toBe('/upload');
+    expect(link).toBeNull();
   });
 
   it('should have correct href for Transactions link', () => {
@@ -82,14 +81,6 @@ describe('App', () => {
     const link = fixture.nativeElement.querySelector('[data-testid="nav-upload-history"]');
     expect(link).toBeTruthy();
     expect(link.getAttribute('href')).toBe('/upload-history');
-  });
-
-  it('should have correct href for P&L Summary link', () => {
-    const fixture = TestBed.createComponent(App);
-    fixture.detectChanges();
-    const link = fixture.nativeElement.querySelector('[data-testid="nav-pnl-summary"]');
-    expect(link).toBeTruthy();
-    expect(link.getAttribute('href')).toBe('/pnl-summary');
   });
 
   it('should render a main content area', () => {

@@ -61,6 +61,20 @@ def _scalars_result(items: list[object]) -> MagicMock:
     return result_mock
 
 
+def _all_result(rows: list[object]) -> MagicMock:
+    """Mock that mimics result.all() returning *rows*."""
+    result_mock = MagicMock()
+    result_mock.all.return_value = rows
+    return result_mock
+
+
+def _first_result(value: object) -> MagicMock:
+    """Mock that mimics result.first() returning *value*."""
+    result_mock = MagicMock()
+    result_mock.first.return_value = value
+    return result_mock
+
+
 def _scalar_one_result(value: object) -> MagicMock:
     """Mock that mimics result.scalar_one() returning *value*."""
     result_mock = MagicMock()
@@ -399,8 +413,10 @@ class TestPositionRepositoryListOptionsPositions:
     async def test_list_options_positions_returns_results(self) -> None:
         session = _make_session()
         mock_pos = MagicMock()
+        open_date = date(2026, 1, 15)
+        close_date = date(2026, 3, 20)
         count_result = _scalar_one_result(1)
-        rows_result = _scalars_result([mock_pos])
+        rows_result = _all_result([(mock_pos, open_date, close_date)])
         session.execute.side_effect = [count_result, rows_result]
 
         repo = PositionRepository(session)
@@ -408,24 +424,29 @@ class TestPositionRepositoryListOptionsPositions:
 
         assert total == 1
         assert len(rows) == 1
+        pos, o_date, c_date = rows[0]
+        assert pos is mock_pos
+        assert o_date == open_date
+        assert c_date == close_date
 
     @pytest.mark.asyncio
     async def test_list_options_positions_with_underlying_filter(self) -> None:
         session = _make_session()
         count_result = _scalar_one_result(0)
-        rows_result = _scalars_result([])
+        rows_result = _all_result([])
         session.execute.side_effect = [count_result, rows_result]
 
         repo = PositionRepository(session)
         total, rows = await repo.list_options_positions(underlying="NVDA")
 
         assert total == 0
+        assert rows == []
 
     @pytest.mark.asyncio
     async def test_list_options_positions_with_status_filter(self) -> None:
         session = _make_session()
         count_result = _scalar_one_result(0)
-        rows_result = _scalars_result([])
+        rows_result = _all_result([])
         session.execute.side_effect = [count_result, rows_result]
 
         repo = PositionRepository(session)
@@ -437,7 +458,7 @@ class TestPositionRepositoryListOptionsPositions:
     async def test_list_options_positions_all_filters(self) -> None:
         session = _make_session()
         count_result = _scalar_one_result(0)
-        rows_result = _scalars_result([])
+        rows_result = _all_result([])
         session.execute.side_effect = [count_result, rows_result]
 
         repo = PositionRepository(session)
@@ -450,23 +471,47 @@ class TestPositionRepositoryListOptionsPositions:
 
         assert total == 0
 
+    @pytest.mark.asyncio
+    async def test_list_options_positions_none_dates_when_no_legs(self) -> None:
+        """Positions with no open/close legs yield None for both dates."""
+        session = _make_session()
+        mock_pos = MagicMock()
+        count_result = _scalar_one_result(1)
+        rows_result = _all_result([(mock_pos, None, None)])
+        session.execute.side_effect = [count_result, rows_result]
+
+        repo = PositionRepository(session)
+        total, rows = await repo.list_options_positions()
+
+        assert total == 1
+        pos, o_date, c_date = rows[0]
+        assert pos is mock_pos
+        assert o_date is None
+        assert c_date is None
+
 
 class TestPositionRepositoryGetOptionsPositionDetail:
     @pytest.mark.asyncio
-    async def test_returns_position_when_found(self) -> None:
+    async def test_returns_position_tuple_when_found(self) -> None:
         session = _make_session()
         mock_pos = MagicMock()
-        session.execute.return_value = _scalar_one_or_none_result(mock_pos)
+        open_date = date(2026, 1, 10)
+        close_date = date(2026, 2, 5)
+        session.execute.return_value = _first_result((mock_pos, open_date, close_date))
 
         repo = PositionRepository(session)
         result = await repo.get_options_position_detail(uuid.uuid4())
 
-        assert result is mock_pos
+        assert result is not None
+        pos, o_date, c_date = result
+        assert pos is mock_pos
+        assert o_date == open_date
+        assert c_date == close_date
 
     @pytest.mark.asyncio
     async def test_returns_none_when_not_found(self) -> None:
         session = _make_session()
-        session.execute.return_value = _scalar_one_or_none_result(None)
+        session.execute.return_value = _first_result(None)
 
         repo = PositionRepository(session)
         result = await repo.get_options_position_detail(uuid.uuid4())
@@ -743,6 +788,313 @@ class TestPnlRepository:
 
         assert len(results) == 1
         assert results[0].period_label == "2026-03 | SPX"
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_with_closed_after(self) -> None:
+        """closed_after date param exercises the date-range filter branch."""
+        session = self._make_pnl_session(
+            options_rows=[("2026", "100.00")],
+            equity_rows=[],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(
+            period="year", pnl_type="all", closed_after=date(2026, 1, 1)
+        )
+
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_with_closed_before(self) -> None:
+        """closed_before date param exercises the date-range filter branch."""
+        session = self._make_pnl_session(
+            options_rows=[("2026", "100.00")],
+            equity_rows=[("2026", "50.00")],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(
+            period="year", pnl_type="all", closed_before=date(2026, 12, 31)
+        )
+
+        assert len(results) == 1
+
+    @pytest.mark.asyncio
+    async def test_get_pnl_summary_with_date_range(self) -> None:
+        """Both closed_after and closed_before exercise both branches."""
+        session = self._make_pnl_session(
+            options_rows=[("2026", "200.00")],
+            equity_rows=[("2026", "100.00")],
+        )
+        repo = PnlRepository(session)
+        results = await repo.get_pnl_summary(
+            period="year",
+            pnl_type="all",
+            closed_after=date(2026, 1, 1),
+            closed_before=date(2026, 6, 30),
+        )
+
+        assert len(results) == 1
+        assert results[0].total_pnl == Decimal("300.00")
+
+
+class TestPnlRepositoryGetPositionsForBucket:
+    """Tests that get_positions_for_bucket returns tuples for options rows."""
+
+    def _make_bucket_session(
+        self,
+        opts_count: int,
+        opts_rows: list[object],
+        eq_count: int,
+        eq_rows: list[object],
+    ) -> MagicMock:
+        """Build a session mock for get_positions_for_bucket.
+
+        options path: count query + rows query (result.all())
+        equity path:  count query + rows query (result.scalars().all())
+        """
+        opts_count_result = _scalar_one_result(opts_count)
+        opts_rows_result = _all_result(opts_rows)
+        eq_count_result = _scalar_one_result(eq_count)
+        eq_rows_result = _scalars_result(eq_rows)
+
+        session = _make_session()
+        session.execute.side_effect = [
+            opts_count_result,
+            opts_rows_result,
+            eq_count_result,
+            eq_rows_result,
+        ]
+        return session
+
+    @pytest.mark.asyncio
+    async def test_options_rows_are_tuples_with_dates(self) -> None:
+        """Options rows in the bucket result are (pos, open_date, close_date) tuples."""
+        mock_pos = MagicMock()
+        open_date = date(2026, 1, 10)
+        close_date = date(2026, 2, 20)
+        session = self._make_bucket_session(
+            opts_count=1,
+            opts_rows=[(mock_pos, open_date, close_date)],
+            eq_count=0,
+            eq_rows=[],
+        )
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            pnl_type="all",
+            offset=0,
+            limit=100,
+        )
+
+        assert opts_total == 1
+        assert len(opts_rows) == 1
+        pos, o_date, c_date = opts_rows[0]
+        assert pos is mock_pos
+        assert o_date == open_date
+        assert c_date == close_date
+        assert eq_total == 0
+        assert eq_rows == []
+
+    @pytest.mark.asyncio
+    async def test_options_rows_none_dates_when_no_legs(self) -> None:
+        """Options rows with no legs yield None for both dates."""
+        mock_pos = MagicMock()
+        session = self._make_bucket_session(
+            opts_count=1,
+            opts_rows=[(mock_pos, None, None)],
+            eq_count=0,
+            eq_rows=[],
+        )
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            pnl_type="all",
+            offset=0,
+            limit=100,
+        )
+
+        assert opts_total == 1
+        pos, o_date, c_date = opts_rows[0]
+        assert pos is mock_pos
+        assert o_date is None
+        assert c_date is None
+
+    @pytest.mark.asyncio
+    async def test_options_only_type_skips_equity_queries(self) -> None:
+        """pnl_type='options' only runs the options path (2 execute calls)."""
+        mock_pos = MagicMock()
+        open_date = date(2026, 1, 5)
+        close_date = date(2026, 3, 10)
+        opts_count_result = _scalar_one_result(1)
+        opts_rows_result = _all_result([(mock_pos, open_date, close_date)])
+
+        session = _make_session()
+        session.execute.side_effect = [opts_count_result, opts_rows_result]
+
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            pnl_type="options",
+            offset=0,
+            limit=100,
+        )
+
+        assert opts_total == 1
+        assert eq_total == 0
+        assert eq_rows == []
+        # Only 2 execute calls (count + rows for options)
+        assert session.execute.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_underlying_filter_applied_to_options_bucket(self) -> None:
+        """group_by='underlying' still returns tuple rows."""
+        mock_pos = MagicMock()
+        open_date = date(2026, 2, 1)
+        opts_count_result = _scalar_one_result(1)
+        opts_rows_result = _all_result([(mock_pos, open_date, None)])
+
+        session = _make_session()
+        session.execute.side_effect = [opts_count_result, opts_rows_result]
+
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="underlying",
+            period_label="NVDA",
+            pnl_type="options",
+            offset=0,
+            limit=100,
+        )
+
+        assert opts_total == 1
+        pos, o_date, c_date = opts_rows[0]
+        assert pos is mock_pos
+        assert o_date == open_date
+        assert c_date is None
+
+    @pytest.mark.asyncio
+    async def test_options_bucket_with_additional_underlying_filter(self) -> None:
+        """The underlying kwarg adds an extra WHERE clause on top of period filter."""
+        mock_pos = MagicMock()
+        opts_count_result = _scalar_one_result(1)
+        opts_rows_result = _all_result([(mock_pos, None, None)])
+
+        session = _make_session()
+        session.execute.side_effect = [opts_count_result, opts_rows_result]
+
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying="NVDA",
+            pnl_type="options",
+            offset=0,
+            limit=100,
+        )
+
+        assert opts_total == 1
+        assert session.execute.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_equity_bucket_group_by_underlying(self) -> None:
+        """group_by='underlying' filters equity by symbol label."""
+        mock_eq = MagicMock()
+        eq_count_result = _scalar_one_result(1)
+        eq_rows_result = _scalars_result([mock_eq])
+
+        session = _make_session()
+        session.execute.side_effect = [eq_count_result, eq_rows_result]
+
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="underlying",
+            period_label="AAPL",
+            pnl_type="equity",
+            offset=0,
+            limit=100,
+        )
+
+        assert eq_total == 1
+        assert eq_rows[0] is mock_eq
+
+    @pytest.mark.asyncio
+    async def test_equity_bucket_with_additional_underlying_filter(self) -> None:
+        """underlying kwarg adds an extra WHERE on top of period filter for equity."""
+        mock_eq = MagicMock()
+        eq_count_result = _scalar_one_result(1)
+        eq_rows_result = _scalars_result([mock_eq])
+
+        session = _make_session()
+        session.execute.side_effect = [eq_count_result, eq_rows_result]
+
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying="AAPL",
+            pnl_type="equity",
+            offset=0,
+            limit=100,
+        )
+
+        assert eq_total == 1
+        assert session.execute.call_count == 2
+
+    @pytest.mark.asyncio
+    async def test_options_bucket_with_closed_after(self) -> None:
+        """closed_after exercises the date-range branch in options bucket."""
+        mock_pos = MagicMock()
+        session = self._make_bucket_session(
+            opts_count=1,
+            opts_rows=[(mock_pos, date(2026, 1, 10), date(2026, 3, 15))],
+            eq_count=0,
+            eq_rows=[],
+        )
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            pnl_type="all",
+            offset=0,
+            limit=100,
+            closed_after=date(2026, 1, 1),
+        )
+
+        assert opts_total == 1
+
+    @pytest.mark.asyncio
+    async def test_options_bucket_with_date_range(self) -> None:
+        """Both closed_after and closed_before exercise both branches."""
+        mock_pos = MagicMock()
+        session = self._make_bucket_session(
+            opts_count=1,
+            opts_rows=[(mock_pos, date(2026, 1, 10), date(2026, 2, 20))],
+            eq_count=1,
+            eq_rows=[MagicMock()],
+        )
+        repo = PnlRepository(session)
+        opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            pnl_type="all",
+            offset=0,
+            limit=100,
+            closed_after=date(2026, 1, 1),
+            closed_before=date(2026, 6, 30),
+        )
+
+        assert opts_total == 1
+        assert eq_total == 1
 
 
 class TestPnlRepositoryGrpLabelHelpers:

@@ -1,62 +1,22 @@
 <div class="pnl-controls">
-  <div data-testid="period-toggle" class="period-toggle">
-    <label>
-      <input
-        type="radio"
-        name="period"
-        value="year"
-        [checked]="period() === 'year'"
-        [disabled]="periodDisabled()"
-        (change)="setPeriod('year')"
-        data-testid="period-year"
-      />
-      Year
-    </label>
-    <label>
-      <input
-        type="radio"
-        name="period"
-        value="month"
-        [checked]="period() === 'month'"
-        [disabled]="periodDisabled()"
-        (change)="setPeriod('month')"
-        data-testid="period-month"
-      />
-      Month
-    </label>
-  </div>
-
-  <div data-testid="group-by-toggle" class="group-by-toggle">
-    <label>
-      <input
-        type="radio"
-        name="groupBy"
-        value="period"
-        [checked]="groupBy() === 'period'"
-        (change)="setGroupBy('period')"
-        data-testid="group-by-period"
-      />
-      Period
-    </label>
-    <label>
-      <input
-        type="radio"
-        name="groupBy"
-        value="underlying"
-        [checked]="groupBy() === 'underlying'"
-        (change)="setGroupBy('underlying')"
-        data-testid="group-by-underlying"
-      />
-      Underlying
-    </label>
-  </div>
-
   <input
     type="text"
     data-testid="underlying-filter"
-    placeholder="Filter by underlying (e.g. NVDA)"
+    placeholder="Filter by underlying"
     (input)="onUnderlyingChange($event)"
   />
+  <select data-testid="time-period-select" (change)="onTimePeriodChange($event)">
+    @for (opt of timePeriodOptions(); track opt.value) {
+      <option [value]="opt.value" [selected]="selectedTimePeriod() === opt.value">
+        {{ opt.label }}
+      </option>
+    }
+  </select>
+  @if (!loading() && !error() && (summary()?.items?.length ?? 0) > 0) {
+    <span class="pnl-controls__total" data-testid="total-pnl" [class]="pnlClass(totalPnl())">
+      Total P&L: {{ totalPnl() }}
+    </span>
+  }
 </div>
 
 @if (loading()) {
@@ -73,9 +33,6 @@
     <p>No P&L data found for the selected period.</p>
   </div>
 } @else {
-  <div class="total-pnl" data-testid="total-pnl" [class]="pnlClass(totalPnl())">
-    Total P&L: {{ totalPnl() }}
-  </div>
   <div data-testid="pnl-cards" class="pnl-cards">
     @for (entry of summary()!.items; track entry.period_label) {
       <div
@@ -90,8 +47,7 @@
           type="button"
         >
           <div data-testid="pnl-card-label">
-            <span class="pnl-card__header-label">{{ firstColumnHeader() }}</span>
-            {{ formatPeriodLabel(entry.period_label, period(), groupBy()) }}
+            {{ entry.period_label }}
           </div>
           <span class="pnl-card__expand-icon" aria-hidden="true">
             {{ expandedLabel() === entry.period_label ? '▲' : '▼' }}
@@ -162,6 +118,9 @@
                       <th>Direction</th>
                       <th>Strike</th>
                       <th>Expiry</th>
+                      <th>Opened</th>
+                      <th>Closed / DTE</th>
+                      <th>Held</th>
                       <th>Status</th>
                       <th class="align-right">P&L</th>
                       <th></th>
@@ -176,6 +135,21 @@
                         <td>{{ pos.direction }}</td>
                         <td>{{ pos.strike }}</td>
                         <td>{{ pos.expiry | date: 'mediumDate' }}</td>
+                        <td>{{ pos.opened_at | date: 'mediumDate' }}</td>
+                        <td>
+                          @if (isClosed(pos.status)) {
+                            {{ pos.closed_at | date: 'mediumDate' }}
+                          } @else {
+                            {{ daysToExpiry(pos.expiry) }}d
+                          }
+                        </td>
+                        <td>
+                          @if (isClosed(pos.status) && daysHeld(pos) !== null) {
+                            {{ daysHeld(pos) }}d
+                          } @else {
+                            —
+                          }
+                        </td>
                         <td><app-status-badge [status]="pos.status" /></td>
                         <td
                           class="align-right"
@@ -196,7 +170,7 @@
                       </tr>
                       @if (isPositionExpanded(pos.id)) {
                         <tr>
-                          <td colspan="9">
+                          <td colspan="12">
                             <app-position-drawer [positionId]="pos.id" />
                           </td>
                         </tr>

@@ -140,9 +140,7 @@ describe('TransactionService', () => {
     });
 
     it('should omit status param when array is empty', (done) => {
-      service
-        .getTransactions({ status: [] })
-        .subscribe({ next: () => done(), error: done.fail });
+      service.getTransactions({ status: [] }).subscribe({ next: () => done(), error: done.fail });
 
       const req = controller.expectOne((r) => r.url === '/api/v1/transactions');
       expect(req.request.params.has('status')).toBe(false);

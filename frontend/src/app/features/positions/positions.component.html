@@ -39,6 +39,9 @@
         <th>Direction</th>
         <th>Strike</th>
         <th>Expiry</th>
+        <th>Opened</th>
+        <th>Closed / DTE</th>
+        <th>Held</th>
         <th>Status</th>
         <th class="align-right">Realized P&amp;L</th>
         <th>Covered Call</th>
@@ -54,6 +57,21 @@
           <td>{{ pos.direction }}</td>
           <td>${{ pos.strike }}</td>
           <td>{{ pos.expiry }}</td>
+          <td>{{ pos.opened_at | date: 'mediumDate' }}</td>
+          <td>
+            @if (isClosed(pos.status)) {
+              {{ pos.closed_at | date: 'mediumDate' }}
+            } @else {
+              {{ daysToExpiry(pos.expiry) }}d
+            }
+          </td>
+          <td>
+            @if (isClosed(pos.status) && daysHeld(pos) !== null) {
+              {{ daysHeld(pos) }}d
+            } @else {
+              —
+            }
+          </td>
           <td>
             <app-status-badge [status]="pos.status" />
             @if (pos.status === 'PARTIALLY_CLOSED') {
@@ -74,17 +92,14 @@
             }
           </td>
           <td>
-            <button
-              [attr.data-testid]="'expand-btn-' + pos.id"
-              (click)="toggleDrawer(pos.id)"
-            >
+            <button [attr.data-testid]="'expand-btn-' + pos.id" (click)="toggleDrawer(pos.id)">
               {{ isExpanded(pos.id) ? 'Collapse' : 'Expand' }}
             </button>
           </td>
         </tr>
         @if (isExpanded(pos.id)) {
           <tr [attr.data-testid]="'drawer-row-' + pos.id">
-            <td colspan="10">
+            <td colspan="13">
               <app-position-drawer [positionId]="pos.id" />
             </td>
           </tr>

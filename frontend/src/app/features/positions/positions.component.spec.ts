@@ -28,6 +28,8 @@ function makePosition(overrides: Partial<OptionsPosition> = {}): OptionsPosition
     status: 'CLOSED',
     is_covered_call: false,
     realized_pnl: '350.00',
+    opened_at: '2026-01-05',
+    closed_at: '2026-02-10',
     ...overrides,
   };
 }
@@ -223,9 +225,7 @@ describe('PositionsComponent', () => {
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
 
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-1"]'))
-        .nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-1"]')).nativeElement.click();
       fixture.detectChanges();
 
       const drawer = fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-1"]'));
@@ -255,20 +255,12 @@ describe('PositionsComponent', () => {
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
 
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-1"]'))
-        .nativeElement.click();
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-2"]'))
-        .nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-1"]')).nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-2"]')).nativeElement.click();
       fixture.detectChanges();
 
-      expect(
-        fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-1"]')),
-      ).not.toBeNull();
-      expect(
-        fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-2"]')),
-      ).not.toBeNull();
+      expect(fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-1"]'))).not.toBeNull();
+      expect(fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-2"]'))).not.toBeNull();
     });
 
     it('19. collapsing P1 drawer does not affect P2 drawer', () => {
@@ -277,24 +269,16 @@ describe('PositionsComponent', () => {
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
 
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-1"]'))
-        .nativeElement.click();
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-2"]'))
-        .nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-1"]')).nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-2"]')).nativeElement.click();
       fixture.detectChanges();
 
       // Collapse P1
-      fixture.debugElement
-        .query(By.css('[data-testid="expand-btn-pos-1"]'))
-        .nativeElement.click();
+      fixture.debugElement.query(By.css('[data-testid="expand-btn-pos-1"]')).nativeElement.click();
       fixture.detectChanges();
 
       expect(fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-1"]'))).toBeNull();
-      expect(
-        fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-2"]')),
-      ).not.toBeNull();
+      expect(fixture.debugElement.query(By.css('[data-testid="drawer-row-pos-2"]'))).not.toBeNull();
     });
 
     it('20. toggleDrawer creates a new Set reference on each call (immutable update)', () => {
@@ -321,9 +305,7 @@ describe('PositionsComponent', () => {
       positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
-      const options = fixture.debugElement.queryAll(
-        By.css('[data-testid="status-filter"] option'),
-      );
+      const options = fixture.debugElement.queryAll(By.css('[data-testid="status-filter"] option'));
       expect(options.length).toBe(POSITION_STATUSES.length + 1); // +1 for "All Statuses"
     });
 
@@ -505,9 +487,7 @@ describe('PositionsComponent', () => {
     });
 
     it('36. should call getPositions again when Retry is clicked', () => {
-      positionServiceMock.getPositions.mockReturnValue(
-        throwError(() => ({ message: 'error' })),
-      );
+      positionServiceMock.getPositions.mockReturnValue(throwError(() => ({ message: 'error' })));
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
 
@@ -550,6 +530,218 @@ describe('PositionsComponent', () => {
       const fixture = TestBed.createComponent(PositionsComponent);
       fixture.detectChanges();
       expect(fixture.componentInstance.pnlClass('-100.00')).toBe('negative');
+    });
+  });
+
+  // ── 8. daysHeld / daysToExpiry / isClosed helpers ────────────────────────────
+
+  describe('daysHeld()', () => {
+    it('41. returns correct number of days for a closed position', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.componentInstance.daysHeld({ opened_at: '2026-01-05', closed_at: '2026-02-10' }),
+      ).toBe(36);
+    });
+
+    it('42. returns null when opened_at is null', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.componentInstance.daysHeld({ opened_at: null, closed_at: '2026-02-10' }),
+      ).toBeNull();
+    });
+
+    it('43. returns null when closed_at is null', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.componentInstance.daysHeld({ opened_at: '2026-01-05', closed_at: null }),
+      ).toBeNull();
+    });
+  });
+
+  describe('daysToExpiry()', () => {
+    it('44. returns a positive number for a far-future expiry', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const result = fixture.componentInstance.daysToExpiry('2099-12-31');
+      expect(result).not.toBeNull();
+      expect(result!).toBeGreaterThan(0);
+    });
+
+    it('45. returns null for empty expiry string', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.daysToExpiry('')).toBeNull();
+    });
+  });
+
+  describe('isClosed()', () => {
+    it('46. returns true for CLOSED', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('CLOSED')).toBe(true);
+    });
+
+    it('47. returns true for EXPIRED', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('EXPIRED')).toBe(true);
+    });
+
+    it('48. returns true for ASSIGNED', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('ASSIGNED')).toBe(true);
+    });
+
+    it('49. returns true for EXERCISED', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('EXERCISED')).toBe(true);
+    });
+
+    it('50. returns false for OPEN', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('OPEN')).toBe(false);
+    });
+
+    it('51. returns false for PARTIALLY_CLOSED', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('PARTIALLY_CLOSED')).toBe(false);
+    });
+  });
+
+  // ── 9. Date/DTE/Held columns in the positions table ──────────────────────────
+
+  describe('positions table date columns', () => {
+    it('52. table shows Opened, Closed/DTE, and Held column headers', () => {
+      positionServiceMock.getPositions.mockReturnValue(of(makeListResponse()));
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const headers = fixture.debugElement
+        .query(By.css('[data-testid="positions-table"]'))
+        .queryAll(By.css('th'));
+      const texts = headers.map((h) => h.nativeElement.textContent.trim());
+      expect(texts).toContain('Opened');
+      expect(texts).toContain('Closed / DTE');
+      expect(texts).toContain('Held');
+    });
+
+    it('53. closed position row shows opened_at date formatted', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({ id: 'pos-1', status: 'CLOSED', opened_at: '2026-01-05' }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      expect(row.nativeElement.textContent).toContain('Jan 5, 2026');
+    });
+
+    it('54. closed position row shows closed_at date in Closed/DTE column', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({ id: 'pos-1', status: 'CLOSED', closed_at: '2026-02-10' }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      expect(row.nativeElement.textContent).toContain('Feb 10, 2026');
+    });
+
+    it('55. closed position shows days held', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({
+              id: 'pos-1',
+              status: 'CLOSED',
+              opened_at: '2026-01-05',
+              closed_at: '2026-02-10',
+            }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      expect(row.nativeElement.textContent).toContain('36d');
+    });
+
+    it('56. open position shows days to expiry in Closed/DTE column', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({
+              id: 'pos-1',
+              status: 'OPEN',
+              opened_at: '2026-01-05',
+              closed_at: null,
+              expiry: '2099-12-31',
+            }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      expect(row.nativeElement.textContent).toMatch(/\d+d/);
+    });
+
+    it('57. open position shows em dash in Held column', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({
+              id: 'pos-1',
+              status: 'OPEN',
+              opened_at: '2026-01-05',
+              closed_at: null,
+              expiry: '2099-12-31',
+            }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      expect(row.nativeElement.textContent).toContain('—');
+    });
+
+    it('58. null opened_at displays empty Opened cell', () => {
+      positionServiceMock.getPositions.mockReturnValue(
+        of(
+          makeListResponse([
+            makePosition({ id: 'pos-1', status: 'OPEN', opened_at: null, closed_at: null }),
+          ]),
+        ),
+      );
+      const fixture = TestBed.createComponent(PositionsComponent);
+      fixture.detectChanges();
+      const row = fixture.debugElement.query(By.css('[data-testid="position-row-pos-1"]'));
+      // daysHeld is null → Held shows —
+      expect(row.nativeElement.textContent).toContain('—');
     });
   });
 });

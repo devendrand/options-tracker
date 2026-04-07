@@ -482,7 +482,7 @@ class TestPositionsListEndpoint:
 
         with patch("app.api.v1.positions.PositionRepository") as mock_repo_cls:
             mock_repo = MagicMock()
-            mock_repo.list_options_positions = AsyncMock(return_value=(1, [pos]))
+            mock_repo.list_options_positions = AsyncMock(return_value=(1, [(pos, None, None)]))
             mock_repo_cls.return_value = mock_repo
 
             response = client.get("/api/v1/positions")
@@ -558,7 +558,9 @@ class TestPositionsDetailEndpoint:
 
         with patch("app.api.v1.positions.PositionRepository") as mock_repo_cls:
             mock_repo = MagicMock()
-            mock_repo.get_options_position_detail = AsyncMock(return_value=pos_ns)
+            mock_repo.get_options_position_detail = AsyncMock(
+                return_value=(pos_ns, None, None)
+            )
             mock_repo_cls.return_value = mock_repo
 
             response = client.get(f"/api/v1/positions/{pos_id}")

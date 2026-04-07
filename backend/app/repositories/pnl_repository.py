@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date
 from decimal import Decimal
 
 from sqlalchemy import func, select
@@ -36,6 +37,8 @@ class PnlRepository:
         pnl_type: str = "all",
         underlying: str | None = None,
         group_by: str = "period",
+        closed_after: date | None = None,
+        closed_before: date | None = None,
     ) -> list[PnlPeriodResponse]:
         """Return chronologically-ordered P&L buckets per period.
 
@@ -44,15 +47,25 @@ class PnlRepository:
             pnl_type: ``'options'``, ``'equity'``, or ``'all'``.
             underlying: Optional ticker filter applied to both options and equity.
             group_by: ``'period'``, ``'underlying'``, or ``'period_underlying'``.
+            closed_after: Optional inclusive lower bound on position close date.
+            closed_before: Optional inclusive upper bound on position close date.
 
         Returns:
             List of :class:`PnlPeriodResponse` ordered ascending by period label.
         """
         options_by_period = await self._options_pnl_grouped(
-            period=period, underlying=underlying, group_by=group_by
+            period=period,
+            underlying=underlying,
+            group_by=group_by,
+            closed_after=closed_after,
+            closed_before=closed_before,
         )
         equity_by_period = await self._equity_pnl_grouped(
-            period=period, underlying=underlying, group_by=group_by
+            period=period,
+            underlying=underlying,
+            group_by=group_by,
+            closed_after=closed_after,
+            closed_before=closed_before,
         )
 
         all_labels: set[str] = set()
@@ -126,6 +139,8 @@ class PnlRepository:
         period: str,
         underlying: str | None,
         group_by: str = "period",
+        closed_after: date | None = None,
+        closed_before: date | None = None,
     ) -> dict[str, Decimal]:
         """Aggregate realized P&L from closed OptionsPosition records."""
         closed_statuses = _OPTIONS_CLOSED_STATUSES
@@ -152,6 +167,10 @@ class PnlRepository:
         )
         if underlying is not None:
             base_q = base_q.where(OptionsPosition.underlying == underlying)
+        if closed_after is not None:
+            base_q = base_q.where(close_leg_date.c.close_date >= closed_after)
+        if closed_before is not None:
+            base_q = base_q.where(close_leg_date.c.close_date <= closed_before)
 
         pos_sub = base_q.subquery("opts_pos")
 
@@ -178,6 +197,8 @@ class PnlRepository:
         period: str,
         underlying: str | None,
         group_by: str = "period",
+        closed_after: date | None = None,
+        closed_before: date | None = None,
     ) -> dict[str, Decimal]:
         """Aggregate realized P&L from closed EquityPosition records."""
         base_q = (
@@ -189,6 +210,10 @@ class PnlRepository:
         )
         if underlying is not None:
             base_q = base_q.where(EquityPosition.symbol == underlying)
+        if closed_after is not None:
+            base_q = base_q.where(EquityPosition.closed_at >= closed_after)
+        if closed_before is not None:
+            base_q = base_q.where(EquityPosition.closed_at <= closed_before)
 
         eq_sub = base_q.subquery("eq_pos")
 
@@ -218,7 +243,9 @@ class PnlRepository:
         pnl_type: str = "all",
         offset: int = 0,
         limit: int = 100,
-    ) -> tuple[int, list[OptionsPosition], int, list[EquityPosition]]:
+        closed_after: date | None = None,
+        closed_before: date | None = None,
+    ) -> tuple[int, list[tuple[OptionsPosition, object, object]], int, list[EquityPosition]]:
         """Return positions belonging to a specific P&L bucket.
 
         Args:
@@ -233,9 +260,13 @@ class PnlRepository:
             pnl_type: ``'options'``, ``'equity'``, or ``'all'``.
             offset: Pagination offset applied to both options and equity queries.
             limit: Maximum rows returned per position type.
+            closed_after: Optional inclusive lower bound on position close date.
+            closed_before: Optional inclusive upper bound on position close date.
 
         Returns:
-            A 4-tuple of ``(options_total, options_rows, equity_total, equity_rows)``.
+            A 4-tuple of ``(options_total, options_rows, equity_total, equity_rows)``
+            where each item in ``options_rows`` is a
+            ``(OptionsPosition, opened_at, closed_at)`` tuple.
         """
         opts_total, opts_rows = 0, []
         eq_total, eq_rows = 0, []
@@ -248,6 +279,8 @@ class PnlRepository:
                 underlying=underlying,
                 offset=offset,
                 limit=limit,
+                closed_after=closed_after,
+                closed_before=closed_before,
             )
 
         if pnl_type in ("equity", "all"):
@@ -258,6 +291,8 @@ class PnlRepository:
                 underlying=underlying,
                 offset=offset,
                 limit=limit,
+                closed_after=closed_after,
+                closed_before=closed_before,
             )
 
         return opts_total, opts_rows, eq_total, eq_rows
@@ -271,8 +306,24 @@ class PnlRepository:
         underlying: str | None,
         offset: int,
         limit: int,
-    ) -> tuple[int, list[OptionsPosition]]:
-        """Query closed OptionsPosition rows for the requested bucket."""
+        closed_after: date | None = None,
+        closed_before: date | None = None,
+    ) -> tuple[int, list[tuple[OptionsPosition, object, object]]]:
+        """Query closed OptionsPosition rows for the requested bucket.
+
+        Returns a 2-tuple of ``(total, rows)`` where each item in ``rows``
+        is a ``(OptionsPosition, opened_at, closed_at)`` tuple.
+        """
+        open_leg_date = (
+            select(
+                OptionsPositionLeg.position_id,
+                func.min(Transaction.transaction_date).label("open_date"),
+            )
+            .join(Transaction, Transaction.id == OptionsPositionLeg.transaction_id)
+            .where(OptionsPositionLeg.leg_role == "OPEN")
+            .group_by(OptionsPositionLeg.position_id)
+            .subquery("open_leg_date")
+        )
         close_leg_date = (
             select(
                 OptionsPositionLeg.position_id,
@@ -302,14 +353,40 @@ class PnlRepository:
 
         if underlying is not None:
             base_q = base_q.where(OptionsPosition.underlying == underlying)
+        if closed_after is not None:
+            base_q = base_q.where(close_leg_date.c.close_date >= closed_after)
+        if closed_before is not None:
+            base_q = base_q.where(close_leg_date.c.close_date <= closed_before)
 
         count_q = select(func.count()).select_from(base_q.subquery())
         total: int = (await self._session.execute(count_q)).scalar_one()
 
-        rows_q = base_q.offset(offset).limit(limit)
-        rows: list[OptionsPosition] = list(
-            (await self._session.execute(rows_q)).scalars().all()
+        rows_q = (
+            select(OptionsPosition, open_leg_date.c.open_date, close_leg_date.c.close_date)
+            .where(OptionsPosition.status.in_(_OPTIONS_CLOSED_STATUSES))
+            .where(OptionsPosition.deleted_at.is_(None))
+            .where(OptionsPosition.realized_pnl.is_not(None))
+            .join(close_leg_date, close_leg_date.c.position_id == OptionsPosition.id)
+            .outerjoin(open_leg_date, open_leg_date.c.position_id == OptionsPosition.id)
         )
+
+        if group_by == "underlying":
+            rows_q = rows_q.where(OptionsPosition.underlying == period_label)
+        else:
+            fmt = self._period_fmt(period)
+            rows_q = rows_q.where(
+                func.to_char(close_leg_date.c.close_date, fmt) == period_label
+            )
+
+        if underlying is not None:
+            rows_q = rows_q.where(OptionsPosition.underlying == underlying)
+        if closed_after is not None:
+            rows_q = rows_q.where(close_leg_date.c.close_date >= closed_after)
+        if closed_before is not None:
+            rows_q = rows_q.where(close_leg_date.c.close_date <= closed_before)
+
+        rows_q = rows_q.offset(offset).limit(limit)
+        rows = list((await self._session.execute(rows_q)).all())
 
         return total, rows
 
@@ -322,6 +399,8 @@ class PnlRepository:
         underlying: str | None,
         offset: int,
         limit: int,
+        closed_after: date | None = None,
+        closed_before: date | None = None,
     ) -> tuple[int, list[EquityPosition]]:
         """Query closed EquityPosition rows for the requested bucket."""
         base_q = (
@@ -342,6 +421,10 @@ class PnlRepository:
 
         if underlying is not None:
             base_q = base_q.where(EquityPosition.symbol == underlying)
+        if closed_after is not None:
+            base_q = base_q.where(EquityPosition.closed_at >= closed_after)
+        if closed_before is not None:
+            base_q = base_q.where(EquityPosition.closed_at <= closed_before)
 
         count_q = select(func.count()).select_from(base_q.subquery())
         total: int = (await self._session.execute(count_q)).scalar_one()

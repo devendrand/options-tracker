@@ -1,4 +1,11 @@
-import { ChangeDetectionStrategy, Component, inject, signal } from '@angular/core';
+import {
+  ChangeDetectionStrategy,
+  Component,
+  EventEmitter,
+  Output,
+  inject,
+  signal,
+} from '@angular/core';
 import { Upload } from '../../core/models/upload.model';
 import { UploadService } from '../../core/services/upload.service';
 
@@ -10,6 +17,8 @@ import { UploadService } from '../../core/services/upload.service';
 })
 export class UploadComponent {
   private readonly uploadService = inject(UploadService);
+
+  @Output() readonly uploaded = new EventEmitter<void>();
 
   private readonly _selectedFile = signal<File | null>(null);
   private readonly _isUploading = signal(false);
@@ -52,18 +61,6 @@ export class UploadComponent {
     }
   }
 
-  onDrop(event: DragEvent): void {
-    event.preventDefault();
-    const file = event.dataTransfer?.files?.[0] ?? null;
-    if (file) {
-      this._selectedFile.set(file);
-    }
-  }
-
-  onDragOver(event: DragEvent): void {
-    event.preventDefault();
-  }
-
   upload(): void {
     const file = this._selectedFile();
     if (!file) {
@@ -77,6 +74,7 @@ export class UploadComponent {
       next: (result) => {
         this._uploadResult.set(result);
         this._isUploading.set(false);
+        this.uploaded.emit();
       },
       error: (err: { message?: string }) => {
         this._errorMessage.set(err?.message ?? 'An unexpected error occurred.');

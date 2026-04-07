@@ -331,8 +331,12 @@ class TestListTransactions:
 class TestListPositions:
     def test_list_positions_options_default(self, api_client: TestClient) -> None:
         pos_ns = _opts_pos_ns()
+        opened = date(2026, 1, 15)
+        closed = date(2026, 3, 20)
         with patch("app.api.v1.positions.PositionRepository") as MockRepo:
-            MockRepo.return_value.list_options_positions = AsyncMock(return_value=(1, [pos_ns]))
+            MockRepo.return_value.list_options_positions = AsyncMock(
+                return_value=(1, [(pos_ns, opened, closed)])
+            )
             MockRepo.return_value.list_equity_positions = AsyncMock(return_value=(0, []))
             response = api_client.get("/api/v1/positions?asset_type=options")
 
@@ -341,6 +345,23 @@ class TestListPositions:
         assert data["total"] == 1
         assert len(data["options_items"]) == 1
         assert data["equity_items"] == []
+        assert data["options_items"][0]["opened_at"] == "2026-01-15"
+        assert data["options_items"][0]["closed_at"] == "2026-03-20"
+
+    def test_list_positions_options_null_dates(self, api_client: TestClient) -> None:
+        """opened_at and closed_at are null when no leg dates are available."""
+        pos_ns = _opts_pos_ns()
+        with patch("app.api.v1.positions.PositionRepository") as MockRepo:
+            MockRepo.return_value.list_options_positions = AsyncMock(
+                return_value=(1, [(pos_ns, None, None)])
+            )
+            MockRepo.return_value.list_equity_positions = AsyncMock(return_value=(0, []))
+            response = api_client.get("/api/v1/positions?asset_type=options")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["options_items"][0]["opened_at"] is None
+        assert data["options_items"][0]["closed_at"] is None
 
     def test_list_positions_equity_only(self, api_client: TestClient) -> None:
         eq_ns = _eq_pos_ns()
@@ -359,7 +380,9 @@ class TestListPositions:
         pos_ns = _opts_pos_ns()
         eq_ns = _eq_pos_ns()
         with patch("app.api.v1.positions.PositionRepository") as MockRepo:
-            MockRepo.return_value.list_options_positions = AsyncMock(return_value=(1, [pos_ns]))
+            MockRepo.return_value.list_options_positions = AsyncMock(
+                return_value=(1, [(pos_ns, None, None)])
+            )
             MockRepo.return_value.list_equity_positions = AsyncMock(return_value=(1, [eq_ns]))
             response = api_client.get("/api/v1/positions?asset_type=all")
 
@@ -414,13 +437,14 @@ class TestGetPositionDetail:
     def test_get_position_detail_found(self, api_client: TestClient) -> None:
         pos_ns = _opts_pos_ns()
         leg_ns = _leg_ns()
-        # legs must be on the position object for the router to iterate
         pos_ns_with_legs = _opts_pos_ns()
         pos_ns_with_legs.legs = [leg_ns]
+        opened = date(2026, 1, 15)
+        closed = date(2026, 3, 20)
 
         with patch("app.api.v1.positions.PositionRepository") as MockRepo:
             MockRepo.return_value.get_options_position_detail = AsyncMock(
-                return_value=pos_ns_with_legs
+                return_value=(pos_ns_with_legs, opened, closed)
             )
             response = api_client.get(f"/api/v1/positions/{pos_ns.id}")
 
@@ -428,6 +452,24 @@ class TestGetPositionDetail:
         data = response.json()
         assert data["underlying"] == "NVDA"
         assert len(data["legs"]) == 1
+        assert data["opened_at"] == "2026-01-15"
+        assert data["closed_at"] == "2026-03-20"
+
+    def test_get_position_detail_null_dates(self, api_client: TestClient) -> None:
+        """opened_at and closed_at are null when no dates are returned."""
+        pos_ns = _opts_pos_ns()
+        pos_ns.legs = []
+
+        with patch("app.api.v1.positions.PositionRepository") as MockRepo:
+            MockRepo.return_value.get_options_position_detail = AsyncMock(
+                return_value=(pos_ns, None, None)
+            )
+            response = api_client.get(f"/api/v1/positions/{pos_ns.id}")
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["opened_at"] is None
+        assert data["closed_at"] is None
 
     def test_get_position_detail_not_found(self, api_client: TestClient) -> None:
         with patch("app.api.v1.positions.PositionRepository") as MockRepo:
@@ -537,6 +579,74 @@ class TestGetPnlSummary:
             pnl_type="all",
             underlying=None,
             group_by="underlying",
+            closed_after=None,
+            closed_before=None,
+        )
+
+    def test_get_pnl_summary_with_closed_after(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=[])
+            MockRepo.return_value.get_pnl_summary = mock_get
+            response = api_client.get("/api/v1/pnl/summary?closed_after=2026-01-01")
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            pnl_type="all",
+            underlying=None,
+            group_by="period",
+            closed_after=date(2026, 1, 1),
+            closed_before=None,
+        )
+
+    def test_get_pnl_summary_with_closed_before(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=[])
+            MockRepo.return_value.get_pnl_summary = mock_get
+            response = api_client.get("/api/v1/pnl/summary?closed_before=2026-03-31")
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            pnl_type="all",
+            underlying=None,
+            group_by="period",
+            closed_after=None,
+            closed_before=date(2026, 3, 31),
+        )
+
+    def test_get_pnl_summary_with_date_range(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=[])
+            MockRepo.return_value.get_pnl_summary = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/summary?closed_after=2026-01-01&closed_before=2026-03-31"
+            )
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            pnl_type="all",
+            underlying=None,
+            group_by="period",
+            closed_after=date(2026, 1, 1),
+            closed_before=date(2026, 3, 31),
+        )
+
+    def test_get_pnl_summary_no_date_params_passes_none(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=[])
+            MockRepo.return_value.get_pnl_summary = mock_get
+            response = api_client.get("/api/v1/pnl/summary")
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            pnl_type="all",
+            underlying=None,
+            group_by="period",
+            closed_after=None,
+            closed_before=None,
         )
 
 
@@ -567,9 +677,11 @@ class TestGetPnlPositions:
     def test_pnl_positions_group_by_period(self, api_client: TestClient) -> None:
         opts_pos = self._make_opts_pos()
         eq_pos = self._make_eq_pos()
+        opened = date(2026, 1, 10)
+        closed = date(2026, 2, 28)
         with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
             MockRepo.return_value.get_positions_for_bucket = AsyncMock(
-                return_value=(1, [opts_pos], 1, [eq_pos])
+                return_value=(1, [(opts_pos, opened, closed)], 1, [eq_pos])
             )
             response = api_client.get(
                 "/api/v1/pnl/positions?period_label=2026&group_by=period&period=year"
@@ -583,12 +695,30 @@ class TestGetPnlPositions:
         assert len(data["options_items"]) == 1
         assert len(data["equity_items"]) == 1
         assert data["options_items"][0]["underlying"] == "NVDA"
+        assert data["options_items"][0]["opened_at"] == "2026-01-10"
+        assert data["options_items"][0]["closed_at"] == "2026-02-28"
         assert data["equity_items"][0]["symbol"] == "AAPL"
+
+    def test_pnl_positions_options_null_dates(self, api_client: TestClient) -> None:
+        """opened_at and closed_at are null when no leg dates are available."""
+        opts_pos = self._make_opts_pos()
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            MockRepo.return_value.get_positions_for_bucket = AsyncMock(
+                return_value=(1, [(opts_pos, None, None)], 0, [])
+            )
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&type=options"
+            )
+
+        assert response.status_code == 200
+        data = response.json()
+        assert data["options_items"][0]["opened_at"] is None
+        assert data["options_items"][0]["closed_at"] is None
 
     def test_pnl_positions_group_by_underlying(self, api_client: TestClient) -> None:
         opts_pos = self._make_opts_pos()
         with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
-            mock_get = AsyncMock(return_value=(1, [opts_pos], 0, []))
+            mock_get = AsyncMock(return_value=(1, [(opts_pos, None, None)], 0, []))
             MockRepo.return_value.get_positions_for_bucket = mock_get
             response = api_client.get(
                 "/api/v1/pnl/positions?period_label=NVDA&group_by=underlying"
@@ -607,6 +737,8 @@ class TestGetPnlPositions:
             pnl_type="all",
             offset=0,
             limit=100,
+            closed_after=None,
+            closed_before=None,
         )
 
     def test_pnl_positions_group_by_underlying_ignores_period(
@@ -629,12 +761,14 @@ class TestGetPnlPositions:
             pnl_type="all",
             offset=0,
             limit=100,
+            closed_after=None,
+            closed_before=None,
         )
 
     def test_pnl_positions_type_options_only(self, api_client: TestClient) -> None:
         opts_pos = self._make_opts_pos()
         with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
-            mock_get = AsyncMock(return_value=(1, [opts_pos], 0, []))
+            mock_get = AsyncMock(return_value=(1, [(opts_pos, None, None)], 0, []))
             MockRepo.return_value.get_positions_for_bucket = mock_get
             response = api_client.get(
                 "/api/v1/pnl/positions?period_label=2026&type=options"
@@ -652,6 +786,8 @@ class TestGetPnlPositions:
             pnl_type="options",
             offset=0,
             limit=100,
+            closed_after=None,
+            closed_before=None,
         )
 
     def test_pnl_positions_type_equity_only(self, api_client: TestClient) -> None:
@@ -675,6 +811,8 @@ class TestGetPnlPositions:
             pnl_type="equity",
             offset=0,
             limit=100,
+            closed_after=None,
+            closed_before=None,
         )
 
     def test_pnl_positions_with_underlying_filter(self, api_client: TestClient) -> None:
@@ -694,6 +832,8 @@ class TestGetPnlPositions:
             pnl_type="all",
             offset=0,
             limit=100,
+            closed_after=None,
+            closed_before=None,
         )
 
     def test_pnl_positions_pagination(self, api_client: TestClient) -> None:
@@ -716,4 +856,48 @@ class TestGetPnlPositions:
             pnl_type="all",
             offset=50,
             limit=25,
+            closed_after=None,
+            closed_before=None,
+        )
+
+    def test_pnl_positions_with_closed_after(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&closed_after=2026-01-01"
+            )
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying=None,
+            pnl_type="all",
+            offset=0,
+            limit=100,
+            closed_after=date(2026, 1, 1),
+            closed_before=None,
+        )
+
+    def test_pnl_positions_with_date_range(self, api_client: TestClient) -> None:
+        with patch("app.api.v1.pnl.PnlRepository") as MockRepo:
+            mock_get = AsyncMock(return_value=(0, [], 0, []))
+            MockRepo.return_value.get_positions_for_bucket = mock_get
+            response = api_client.get(
+                "/api/v1/pnl/positions?period_label=2026&closed_after=2026-01-01&closed_before=2026-03-31"
+            )
+
+        assert response.status_code == 200
+        mock_get.assert_awaited_once_with(
+            period="year",
+            group_by="period",
+            period_label="2026",
+            underlying=None,
+            pnl_type="all",
+            offset=0,
+            limit=100,
+            closed_after=date(2026, 1, 1),
+            closed_before=date(2026, 3, 31),
         )

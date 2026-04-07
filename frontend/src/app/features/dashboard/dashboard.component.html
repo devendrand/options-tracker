@@ -1,75 +1,72 @@
 @if (!hasData()) {
   <div data-testid="no-data-cta" class="no-data-cta">
     <p>No data yet. Upload your first E*TRADE CSV to get started.</p>
-    <a data-testid="no-data-upload-link" [routerLink]="['/upload']" class="btn-primary">Upload CSV</a>
+    <a data-testid="no-data-upload-link" [routerLink]="['/dashboard']" class="btn-primary"
+      >Upload CSV</a
+    >
   </div>
 }
 
-<div class="dashboard-grid">
-  <div data-testid="pnl-card" class="card">
-    <h2 class="card__title">Total Realized P&amp;L</h2>
-    @if (pnlLoading()) {
-      <span data-testid="pnl-loading" class="loading-text">Loading...</span>
-    } @else if (pnlError()) {
-      <div data-testid="pnl-error" class="error-box">
-        <p>{{ pnlError() }}</p>
-        <button data-testid="pnl-retry-btn" class="btn-retry" (click)="loadPnl()">Retry</button>
-      </div>
-    } @else {
-      <span
-        data-testid="pnl-value"
-        class="pnl-value"
-        [class.positive]="isPnlPositive()"
-        [class.negative]="isPnlNegative()"
-      >{{ totalPnl() }}</span>
-    }
+<div class="dashboard-layout">
+  <div class="dashboard-main">
+    <app-pnl-summary data-testid="pnl-summary-section" />
   </div>
 
-  <div data-testid="counts-card" class="card">
-    <h2 class="card__title">Positions</h2>
-    @if (countsLoading()) {
-      <span data-testid="counts-loading" class="loading-text">Loading...</span>
-    } @else if (countsError()) {
-      <div data-testid="counts-error" class="error-box">
-        <p>{{ countsError() }}</p>
-        <button data-testid="counts-retry-btn" class="btn-retry" (click)="loadCounts()">Retry</button>
-      </div>
-    } @else {
-      <div class="counts-row">
-        <div class="stat">
-          <span data-testid="open-count" class="stat__value">{{ openCount() }}</span>
-          <span class="stat__label">Open</span>
+  <aside class="dashboard-sidebar">
+    <div data-testid="counts-card" class="card sidebar-card">
+      <div class="card__title">Positions</div>
+      @if (countsLoading()) {
+        <span data-testid="counts-loading" class="loading-text">Loading...</span>
+      } @else if (countsError()) {
+        <div data-testid="counts-error" class="error-box">
+          <p>{{ countsError() }}</p>
+          <button data-testid="counts-retry-btn" class="btn-retry" (click)="loadCounts()">
+            Retry
+          </button>
         </div>
-        <div class="stat">
-          <span data-testid="closed-count" class="stat__value">{{ closedCount() }}</span>
-          <span class="stat__label">Closed</span>
+      } @else {
+        <div class="counts-row">
+          <div class="stat">
+            <span data-testid="open-count" class="stat__value">{{ openCount() }}</span>
+            <span class="stat__label">Open</span>
+          </div>
+          <div class="stat">
+            <span data-testid="closed-count" class="stat__value">{{ closedCount() }}</span>
+            <span class="stat__label">Closed</span>
+          </div>
         </div>
-      </div>
-    }
-  </div>
-
-  <div data-testid="uploads-card" class="card card--wide">
-    <h2 class="card__title">Recent Uploads</h2>
-    @if (uploadsLoading()) {
-      <span data-testid="uploads-loading" class="loading-text">Loading...</span>
-    } @else if (uploadsError()) {
-      <div data-testid="uploads-error" class="error-box">
-        <p>{{ uploadsError() }}</p>
-        <button data-testid="uploads-retry-btn" class="btn-retry" (click)="loadRecentUploads()">Retry</button>
-      </div>
-    } @else if (recentUploads().length === 0) {
-      <p data-testid="uploads-empty" class="empty-text">No uploads yet.</p>
-    } @else {
-      <ul class="upload-list">
-        @for (upload of recentUploads(); track upload.id) {
-          <li class="upload-list__item">
-            <a
-              [attr.data-testid]="'upload-link-' + upload.id"
-              [routerLink]="['/uploads', upload.id]"
-            >{{ upload.filename }}</a>
-          </li>
-        }
-      </ul>
-    }
-  </div>
+      }
+    </div>
+    <div data-testid="uploads-card" class="card sidebar-card">
+      <div class="card__title">Upload CSV</div>
+      <app-upload (uploaded)="onUploadComplete()" data-testid="embedded-upload" />
+    </div>
+    <div class="card sidebar-card">
+      <div class="card__title">Recent Uploads</div>
+      @if (uploadsLoading()) {
+        <span data-testid="uploads-loading" class="loading-text">Loading...</span>
+      } @else if (uploadsError()) {
+        <div data-testid="uploads-error" class="error-box">
+          <p>{{ uploadsError() }}</p>
+          <button data-testid="uploads-retry-btn" class="btn-retry" (click)="loadRecentUploads()">
+            Retry
+          </button>
+        </div>
+      } @else if (recentUploads().length === 0) {
+        <p data-testid="uploads-empty" class="empty-text">No uploads yet.</p>
+      } @else {
+        <ul class="upload-list">
+          @for (upload of recentUploads(); track upload.id) {
+            <li class="upload-list__item">
+              <a
+                [attr.data-testid]="'upload-link-' + upload.id"
+                [routerLink]="['/uploads', upload.id]"
+                >{{ upload.filename }}</a
+              >
+            </li>
+          }
+        </ul>
+      }
+    </div>
+  </aside>
 </div>

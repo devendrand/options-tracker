@@ -1,0 +1,4 @@
+- [Docker Compose Scaffold](project_docker_scaffold.md) — Service names, ports, healthcheck patterns, volume strategy for local dev
+- [CI Pipeline Configuration](project_ci_pipelines.md) — GitHub Actions workflows for backend/frontend/docker, triggers, and quality gates
+- [F-19 Smoke Test Suite](project_smoke_tests.md) — smoke-tests/ location, fixture files, P&L expectations, 12 categories, GO/NO-GO criteria
+- [F-20 Deployment Infrastructure](project_deployment.md) — DEV/QA/PROD compose files, Makefile commands, nginx proxy strategy, entrypoint pattern

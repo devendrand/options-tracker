@@ -32,6 +32,8 @@ export interface OptionsPosition {
   status: OptionsPositionStatus;
   realized_pnl: string | null;
   is_covered_call: boolean;
+  opened_at: string | null;
+  closed_at: string | null;
 }
 
 export interface OptionsPositionDetail extends OptionsPosition {

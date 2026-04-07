@@ -35,16 +35,20 @@
     <button data-testid="try-again-btn" (click)="reset()">Try Again</button>
   </div>
 } @else {
-  <div
-    data-testid="upload-zone"
-    class="upload-zone"
-    (drop)="onDrop($event)"
-    (dragover)="onDragOver($event)"
-  >
-    <input type="file" accept=".csv" (change)="onFileSelected($event)" />
-    <p>Drag &amp; drop a CSV file or click to browse</p>
+  <div data-testid="upload-zone" class="upload-zone">
+    <input
+      type="file"
+      accept=".csv"
+      data-testid="file-input"
+      (change)="onFileSelected($event)"
+    />
+    <button
+      data-testid="upload-btn"
+      class="upload-btn"
+      [disabled]="!selectedFile || isUploading"
+      (click)="upload()"
+    >
+      Upload
+    </button>
   </div>
-  <button data-testid="upload-btn" class="upload-btn" [disabled]="!selectedFile || isUploading" (click)="upload()">
-    Upload
-  </button>
 }

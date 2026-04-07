@@ -1,0 +1,4 @@
+- [Backend Scaffold Decisions](project_scaffold.md) — Lazy DB init, JSON logging in lifespan, test layout, lru_cache isolation
+- [Backend API contracts and schema conventions](project_api_contracts.md) — Schema alias patterns, dedup result structure, ParsedRow.option_type is str not enum
+- [E*TRADE CSV Format — Real vs Test Fixture](project_etrade_csv_format.md) — 13-col real format, header normalisation, multi-space options description, helpers accept str|None
+- [Upload Orchestrator Matcher Wiring](project_orchestrator_wiring.md) — active_txns tracking, option_type str/enum duality, P&L dedup for scale-in, covered call uses same-batch lots only

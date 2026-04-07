@@ -1,11 +1,4 @@
-import {
-  ChangeDetectionStrategy,
-  Component,
-  OnInit,
-  inject,
-  input,
-  signal,
-} from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, inject, input, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { OptionsPositionDetail } from '@core/models/position.model';
 import { PositionService } from '@core/services/position.service';

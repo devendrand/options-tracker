@@ -8,8 +8,7 @@ import {
 } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import {
-  PnlGroupBy,
-  PnlPeriod,
+  TimePeriodOption,
   PnlPositionsParams,
   PnlQueryParams,
   PnlSummary,
@@ -32,9 +31,8 @@ export class PnlSummaryComponent implements OnInit {
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
   readonly summary = signal<PnlSummary | null>(null);
-  readonly period = signal<PnlPeriod>('year');
   readonly underlying = signal<string>('');
-  readonly groupBy = signal<PnlGroupBy>('period');
+  readonly selectedTimePeriod = signal<string>('current-year');
 
   readonly expandedLabel = signal<string | null>(null);
   readonly bucketPositions = signal<PositionListResponse | null>(null);
@@ -47,10 +45,55 @@ export class PnlSummaryComponent implements OnInit {
     return items.reduce((sum, e) => sum + parseFloat(e.total_pnl), 0).toFixed(2);
   });
 
-  readonly periodDisabled = computed(() => this.groupBy() === 'underlying');
+  readonly timePeriodOptions = computed<TimePeriodOption[]>(() => {
+    const now = new Date();
+    const year = now.getFullYear();
 
-  readonly firstColumnHeader = computed(() => {
-    return this.groupBy() === 'underlying' ? 'Underlying' : 'Period';
+    const fixed: TimePeriodOption[] = [
+      {
+        label: 'Last 7 Days',
+        value: 'last-7',
+        closed_after: this.daysAgo(7),
+        closed_before: this.today(),
+      },
+      {
+        label: 'Last 30 Days',
+        value: 'last-30',
+        closed_after: this.daysAgo(30),
+        closed_before: this.today(),
+      },
+      {
+        label: 'Last 60 Days',
+        value: 'last-60',
+        closed_after: this.daysAgo(60),
+        closed_before: this.today(),
+      },
+      {
+        label: 'Last 90 Days',
+        value: 'last-90',
+        closed_after: this.daysAgo(90),
+        closed_before: this.today(),
+      },
+      {
+        label: 'Current Year',
+        value: 'current-year',
+        closed_after: `${year}-01-01`,
+        closed_before: `${year}-12-31`,
+      },
+      {
+        label: 'Prior Year',
+        value: 'prior-year',
+        closed_after: `${year - 1}-01-01`,
+        closed_before: `${year - 1}-12-31`,
+      },
+    ];
+
+    return [...fixed, ...this.buildQuarterlyOptions(), { label: 'Custom', value: 'custom' }];
+  });
+
+  readonly selectedDates = computed(() => {
+    const opt = this.timePeriodOptions().find((o) => o.value === this.selectedTimePeriod());
+    return { closed_after: opt?.closed_after, closed_before: opt?.closed_before };
   });
 
   ngOnInit(): void {
@@ -61,15 +104,16 @@ export class PnlSummaryComponent implements OnInit {
     this.expandedLabel.set(null);
     this.bucketPositions.set(null);
     this.expandedPositionIds.set(new Set());
-
     this.loading.set(true);
     this.error.set(null);
 
+    const dates = this.selectedDates();
     const params: PnlQueryParams = {
-      period: this.period(),
-      group_by: this.groupBy(),
+      group_by: 'underlying',
     };
     if (this.underlying()) params.underlying = this.underlying();
+    if (dates.closed_after) params.closed_after = dates.closed_after;
+    if (dates.closed_before) params.closed_before = dates.closed_before;
 
     this.pnlService.getSummary(params).subscribe({
       next: (summary) => {
@@ -83,18 +127,13 @@ export class PnlSummaryComponent implements OnInit {
     });
   }
 
-  setPeriod(p: PnlPeriod): void {
-    this.period.set(p);
-    this.loadSummary();
-  }
-
-  setGroupBy(g: PnlGroupBy): void {
-    this.groupBy.set(g);
-    this.loadSummary();
-  }
-
   onUnderlyingChange(event: Event): void {
     this.underlying.set((event.target as HTMLInputElement).value);
+    this.loadSummary();
+  }
+
+  onTimePeriodChange(event: Event): void {
+    this.selectedTimePeriod.set((event.target as HTMLSelectElement).value);
     this.loadSummary();
   }
 
@@ -103,22 +142,6 @@ export class PnlSummaryComponent implements OnInit {
     if (n > 0) return 'pnl-positive';
     if (n < 0) return 'pnl-negative';
     return '';
-  }
-
-  formatPeriodLabel(label: string, p: PnlPeriod, groupBy?: PnlGroupBy): string {
-    if (groupBy === 'underlying') {
-      return label;
-    }
-    if (p === 'month') {
-      const [year, month] = label.split('-');
-      const date = new Date(Number(year), Number(month) - 1, 1);
-      return date.toLocaleDateString('en-US', {
-        month: 'short',
-        year: 'numeric',
-        timeZone: 'UTC',
-      });
-    }
-    return label;
   }
 
   toggleCard(label: string): void {
@@ -137,12 +160,15 @@ export class PnlSummaryComponent implements OnInit {
     this.bucketLoading.set(true);
     this.bucketError.set(null);
     this.bucketPositions.set(null);
+    const dates = this.selectedDates();
     const params: PnlPositionsParams = {
-      period: this.period(),
-      group_by: this.groupBy(),
+      period: 'year',
+      group_by: 'underlying',
       period_label: label,
     };
     if (this.underlying()) params.underlying = this.underlying();
+    if (dates.closed_after) params.closed_after = dates.closed_after;
+    if (dates.closed_before) params.closed_before = dates.closed_before;
     this.pnlService.getPositionsForBucket(params).subscribe({
       next: (response) => {
         this.bucketPositions.set(response);
@@ -167,5 +193,74 @@ export class PnlSummaryComponent implements OnInit {
 
   isPositionExpanded(id: string): boolean {
     return this.expandedPositionIds().has(id);
+  }
+
+  daysHeld(pos: { opened_at: string | null; closed_at: string | null }): number | null {
+    if (!pos.opened_at || !pos.closed_at) return null;
+    const open = new Date(pos.opened_at + 'T00:00:00');
+    const close = new Date(pos.closed_at + 'T00:00:00');
+    return Math.round((close.getTime() - open.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  daysToExpiry(expiry: string): number | null {
+    if (!expiry) return null;
+    const exp = new Date(expiry + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  isClosed(status: string): boolean {
+    return ['CLOSED', 'EXPIRED', 'ASSIGNED', 'EXERCISED'].includes(status);
+  }
+
+  private today(): string {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  private daysAgo(n: number): string {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toISOString().split('T')[0];
+  }
+
+  private buildQuarterlyOptions(): TimePeriodOption[] {
+    const now = new Date();
+    const currentQ = Math.floor(now.getMonth() / 3);
+    const currentYear = now.getFullYear();
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    const quarters: TimePeriodOption[] = [];
+    for (let i = 0; i < 4; i++) {
+      let q = currentQ - i;
+      let y = currentYear;
+      while (q < 0) {
+        q += 4;
+        y--;
+      }
+      const sm = q * 3;
+      const em = sm + 2;
+      const start = new Date(y, sm, 1);
+      const end = new Date(y, em + 1, 0);
+      quarters.push({
+        label: `${months[sm]} - ${months[em]} ${y}`,
+        value: `q${q}-${y}`,
+        closed_after: start.toISOString().split('T')[0],
+        closed_before: end.toISOString().split('T')[0],
+      });
+    }
+    return quarters;
   }
 }

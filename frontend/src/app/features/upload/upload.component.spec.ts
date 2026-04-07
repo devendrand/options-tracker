@@ -142,73 +142,15 @@ describe('UploadComponent', () => {
     });
   });
 
-  // ── 3. Drag and drop ────────────────────────────────────────────────────────
+  // ── 3. Upload zone rendering ─────────────────────────────────────────────
 
-  describe('drag and drop', () => {
-    it('should set selectedFile from dropped file', () => {
-      const fixture = TestBed.createComponent(UploadComponent);
-      fixture.detectChanges();
-      const file = makeFile();
-
-      const mockEvent = {
-        preventDefault: jest.fn(),
-        dataTransfer: { files: [file] },
-      } as unknown as DragEvent;
-
-      fixture.componentInstance.onDrop(mockEvent);
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.selectedFile).toBe(file);
-    });
-
-    it('should not set selectedFile if drop has no files', () => {
-      const fixture = TestBed.createComponent(UploadComponent);
-      fixture.detectChanges();
-
-      const mockEvent = {
-        preventDefault: jest.fn(),
-        dataTransfer: { files: [] },
-      } as unknown as DragEvent;
-
-      fixture.componentInstance.onDrop(mockEvent);
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.selectedFile).toBeNull();
-    });
-
-    it('should not set selectedFile if dataTransfer is null', () => {
-      const fixture = TestBed.createComponent(UploadComponent);
-      fixture.detectChanges();
-
-      const mockEvent = {
-        preventDefault: jest.fn(),
-        dataTransfer: null,
-      } as unknown as DragEvent;
-
-      fixture.componentInstance.onDrop(mockEvent);
-      fixture.detectChanges();
-
-      expect(fixture.componentInstance.selectedFile).toBeNull();
-    });
-
-    it('should prevent default on dragover', () => {
-      const fixture = TestBed.createComponent(UploadComponent);
-      fixture.detectChanges();
-
-      const mockEvent = {
-        preventDefault: jest.fn(),
-      } as unknown as DragEvent;
-
-      fixture.componentInstance.onDragOver(mockEvent);
-
-      expect(mockEvent.preventDefault).toHaveBeenCalled();
-    });
-
-    it('should render upload zone with drop and dragover bindings', () => {
+  describe('upload zone', () => {
+    it('should render upload zone with file input', () => {
       const fixture = TestBed.createComponent(UploadComponent);
       fixture.detectChanges();
       const zone = fixture.debugElement.query(By.css('[data-testid="upload-zone"]'));
       expect(zone).not.toBeNull();
+      expect(zone.query(By.css('[data-testid="file-input"]'))).not.toBeNull();
     });
   });
 
@@ -332,6 +274,44 @@ describe('UploadComponent', () => {
 
       const btn = fixture.debugElement.query(By.css('[data-testid="upload-another-btn"]'));
       expect(btn).not.toBeNull();
+    });
+  });
+
+  // ── 4b. uploaded output event ──────────────────────────────────────────────
+
+  describe('uploaded output event', () => {
+    it('should emit uploaded event after a successful upload', () => {
+      uploadServiceMock.createUpload.mockReturnValue(of(mockUpload));
+      const fixture = TestBed.createComponent(UploadComponent);
+      fixture.componentInstance.selectedFile = makeFile();
+      fixture.detectChanges();
+
+      let emitted = false;
+      fixture.componentInstance.uploaded.subscribe(() => {
+        emitted = true;
+      });
+
+      fixture.componentInstance.upload();
+
+      expect(emitted).toBe(true);
+    });
+
+    it('should not emit uploaded event when upload fails', () => {
+      uploadServiceMock.createUpload.mockReturnValue(
+        throwError(() => ({ message: 'Upload failed' })),
+      );
+      const fixture = TestBed.createComponent(UploadComponent);
+      fixture.componentInstance.selectedFile = makeFile();
+      fixture.detectChanges();
+
+      let emitted = false;
+      fixture.componentInstance.uploaded.subscribe(() => {
+        emitted = true;
+      });
+
+      fixture.componentInstance.upload();
+
+      expect(emitted).toBe(false);
     });
   });
 

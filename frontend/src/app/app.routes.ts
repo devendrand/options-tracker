@@ -13,8 +13,7 @@ export const routes: Routes = [
   },
   {
     path: 'upload',
-    loadComponent: () =>
-      import('./features/upload/upload.component').then((m) => m.UploadComponent),
+    redirectTo: 'dashboard',
   },
   {
     path: 'transactions',
@@ -35,8 +34,7 @@ export const routes: Routes = [
   },
   {
     path: 'pnl-summary',
-    loadComponent: () =>
-      import('./features/pnl-summary/pnl-summary.component').then((m) => m.PnlSummaryComponent),
+    redirectTo: 'dashboard',
   },
   {
     path: '**',

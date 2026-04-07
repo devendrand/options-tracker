@@ -1,0 +1,2 @@
+- [Project Architecture Standards](project_arch_standards.md) — Quality gates, stack decisions, domain rules, common review watch-points for v0.1
+- [Frontend-Backend API Contract Mismatches](project_api_contract_issues.md) — Critical model/schema gaps in Upload, Position, PnL models found during F-15 to F-18 reviews

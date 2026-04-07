@@ -54,10 +54,7 @@ describe('PositionDrawerComponent', () => {
 
     await TestBed.configureTestingModule({
       imports: [PositionDrawerComponent],
-      providers: [
-        { provide: PositionService, useValue: positionServiceMock },
-        DatePipe,
-      ],
+      providers: [{ provide: PositionService, useValue: positionServiceMock }, DatePipe],
     }).compileComponents();
   });
 
@@ -153,9 +150,7 @@ describe('PositionDrawerComponent', () => {
     });
 
     it('10. should show "—" when total_realized_pnl is null', () => {
-      positionServiceMock.getPosition.mockReturnValue(
-        of(makeDetail({ total_realized_pnl: null })),
-      );
+      positionServiceMock.getPosition.mockReturnValue(of(makeDetail({ total_realized_pnl: null })));
       const fixture = createComponent();
       fixture.detectChanges();
       const pnlEl = fixture.debugElement.query(By.css('[data-testid="total-pnl"]'));
@@ -232,9 +227,7 @@ describe('PositionDrawerComponent', () => {
     });
 
     it('17. should call loadDetail again when retry button is clicked', () => {
-      positionServiceMock.getPosition.mockReturnValue(
-        throwError(() => ({ message: 'error' })),
-      );
+      positionServiceMock.getPosition.mockReturnValue(throwError(() => ({ message: 'error' })));
       const fixture = createComponent();
       fixture.detectChanges();
 
@@ -247,9 +240,7 @@ describe('PositionDrawerComponent', () => {
     });
 
     it('18. should clear loading state after an error', () => {
-      positionServiceMock.getPosition.mockReturnValue(
-        throwError(() => ({ message: 'error' })),
-      );
+      positionServiceMock.getPosition.mockReturnValue(throwError(() => ({ message: 'error' })));
       const fixture = createComponent();
       fixture.detectChanges();
       const loading = fixture.debugElement.query(By.css('[data-testid="drawer-loading"]'));

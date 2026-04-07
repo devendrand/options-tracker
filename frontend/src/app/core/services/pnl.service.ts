@@ -28,6 +28,12 @@ export class PnlService {
       if (params.group_by !== undefined) {
         httpParams = httpParams.set('group_by', params.group_by);
       }
+      if (params.closed_after !== undefined) {
+        httpParams = httpParams.set('closed_after', params.closed_after);
+      }
+      if (params.closed_before !== undefined) {
+        httpParams = httpParams.set('closed_before', params.closed_before);
+      }
     }
     return this.http.get<PnlSummary>(`${this.baseUrl}/pnl/summary`, {
       params: httpParams,
@@ -41,6 +47,12 @@ export class PnlService {
       .set('period_label', params.period_label);
     if (params.underlying !== undefined) {
       httpParams = httpParams.set('underlying', params.underlying);
+    }
+    if (params.closed_after !== undefined) {
+      httpParams = httpParams.set('closed_after', params.closed_after);
+    }
+    if (params.closed_before !== undefined) {
+      httpParams = httpParams.set('closed_before', params.closed_before);
     }
     return this.http.get<PositionListResponse>(`${this.baseUrl}/pnl/positions`, {
       params: httpParams,

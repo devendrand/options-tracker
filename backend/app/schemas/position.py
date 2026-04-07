@@ -7,7 +7,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from app.models.enums import (
     EquityPositionSource,
@@ -85,6 +85,8 @@ class OptionsPositionResponse(BaseModel):
     status: OptionsPositionStatus
     realized_pnl: Decimal | None
     is_covered_call: bool
+    opened_at: date | None = None
+    closed_at: date | None = None
 
 
 class OptionsPositionDetailResponse(OptionsPositionResponse):

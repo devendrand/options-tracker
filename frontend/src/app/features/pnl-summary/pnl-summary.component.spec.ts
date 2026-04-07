@@ -30,6 +30,7 @@ function makeOptionsPosition(
   id = 'pos-1',
   underlying = 'SPX',
   pnl = '500.00',
+  overrides: Partial<PositionListResponse['options_items'][0]> = {},
 ): PositionListResponse['options_items'][0] {
   return {
     id,
@@ -42,6 +43,9 @@ function makeOptionsPosition(
     status: 'CLOSED',
     realized_pnl: pnl,
     is_covered_call: false,
+    opened_at: '2026-01-01',
+    closed_at: '2026-01-20',
+    ...overrides,
   };
 }
 
@@ -57,7 +61,7 @@ function makeEntry(label: string, totalPnl = '100.00', optionsPnl = '100.00', eq
 function makeSummary(
   items = [makeEntry('2026', '1250.00')],
   period = 'year',
-  group_by: PnlGroupBy = 'period',
+  group_by: PnlGroupBy = 'underlying',
 ): PnlSummary {
   return { period, group_by, items };
 }
@@ -93,13 +97,15 @@ describe('PnlSummaryComponent', () => {
       expect(fixture.componentInstance).toBeTruthy();
     });
 
-    it('2. should call getSummary with period=year and group_by=period on ngOnInit (defaults)', () => {
+    it('2. should call getSummary with group_by=underlying and current-year dates on ngOnInit', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
+      const year = new Date().getFullYear();
       expect(pnlServiceMock.getSummary).toHaveBeenCalledWith({
-        period: 'year',
-        group_by: 'period',
+        group_by: 'underlying',
+        closed_after: `${year}-01-01`,
+        closed_before: `${year}-12-31`,
       });
     });
 
@@ -198,89 +204,139 @@ describe('PnlSummaryComponent', () => {
     });
   });
 
-  // ── 4. Period toggle ──────────────────────────────────────────────────────────
+  // ── 4. Time period dropdown ───────────────────────────────────────────────────
 
-  describe('period toggle', () => {
-    it('12. year radio is checked by default', () => {
+  describe('time period dropdown', () => {
+    it('12. selectedTimePeriod defaults to "current-year"', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
-      const yearRadio: HTMLInputElement = fixture.debugElement.query(
-        By.css('[data-testid="period-year"]'),
-      ).nativeElement;
-      expect(yearRadio.checked).toBe(true);
+      expect(fixture.componentInstance.selectedTimePeriod()).toBe('current-year');
     });
 
-    it('13. switching to Month calls getSummary with period=month', () => {
+    it('13. timePeriodOptions produces 11 options (6 fixed + 4 quarters + 1 custom)', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.timePeriodOptions().length).toBe(11);
+    });
+
+    it('14. timePeriodOptions includes rolling quarterly labels', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      const quarterOptions = fixture.componentInstance
+        .timePeriodOptions()
+        .filter((o) => o.value.startsWith('q'));
+      expect(quarterOptions.length).toBe(4);
+    });
+
+    it('15. timePeriodOptions includes "Current Year" option', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      const opt = fixture.componentInstance
+        .timePeriodOptions()
+        .find((o) => o.value === 'current-year');
+      expect(opt).toBeDefined();
+      expect(opt!.label).toBe('Current Year');
+    });
+
+    it('16. timePeriodOptions includes "Custom" option with no dates', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      const custom = fixture.componentInstance
+        .timePeriodOptions()
+        .find((o) => o.value === 'custom');
+      expect(custom).toBeDefined();
+      expect(custom!.closed_after).toBeUndefined();
+      expect(custom!.closed_before).toBeUndefined();
+    });
+
+    it('17. time-period-select renders in DOM', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.debugElement.query(By.css('[data-testid="time-period-select"]')),
+      ).not.toBeNull();
+    });
+
+    it('18. no period-toggle in DOM (regression — removed)', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('[data-testid="period-toggle"]'))).toBeNull();
+    });
+
+    it('19. no group-by-toggle in DOM (regression — removed)', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('[data-testid="group-by-toggle"]'))).toBeNull();
+    });
+
+    it('20. changing time period calls loadSummary', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
       pnlServiceMock.getSummary.mockClear();
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([], 'month')));
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
 
-      fixture.componentInstance.setPeriod('month');
-      expect(pnlServiceMock.getSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ period: 'month' }),
-      );
+      fixture.componentInstance.onTimePeriodChange({
+        target: { value: 'last-30' },
+      } as unknown as Event);
+      expect(pnlServiceMock.getSummary).toHaveBeenCalledTimes(1);
     });
 
-    it('14. switching back to Year calls getSummary with period=year', () => {
+    it('21. selecting "Last 30 Days" sends correct closed_after/closed_before', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
-      fixture.componentInstance.setPeriod('month');
-
       pnlServiceMock.getSummary.mockClear();
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      fixture.componentInstance.setPeriod('year');
-      expect(pnlServiceMock.getSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ period: 'year' }),
-      );
-    });
-  });
 
-  // ── 5. Period label formatting ────────────────────────────────────────────────
+      fixture.componentInstance.onTimePeriodChange({
+        target: { value: 'last-30' },
+      } as unknown as Event);
 
-  describe('formatPeriodLabel()', () => {
-    it('15. month period_label "2026-03" is displayed as "Mar 2026"', () => {
-      const items = [makeEntry('2026-03', '500.00')];
-      pnlServiceMock.getSummary.mockReturnValue(of({ period: 'month', items }));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.componentInstance.period.set('month');
-      fixture.detectChanges();
-      const label = fixture.debugElement.query(By.css('[data-testid="pnl-card-label"]'));
-      expect(label.nativeElement.textContent).toContain('Mar 2026');
+      const call = pnlServiceMock.getSummary.mock.calls[0][0];
+      expect(call).toHaveProperty('closed_after');
+      expect(call).toHaveProperty('closed_before');
+      expect(call!.closed_after).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+      expect(call!.closed_before).toMatch(/^\d{4}-\d{2}-\d{2}$/);
     });
 
-    it('16. year period_label "2026" is displayed as "2026"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      const label = fixture.debugElement.query(By.css('[data-testid="pnl-card-label"]'));
-      expect(label.nativeElement.textContent).toContain('2026');
-    });
-
-    it('17. formatPeriodLabel with month="2026-12" returns "Dec 2026"', () => {
+    it('22. selecting "Custom" sends no date filters', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
-      expect(fixture.componentInstance.formatPeriodLabel('2026-12', 'month', 'period')).toBe(
-        'Dec 2026',
-      );
+      pnlServiceMock.getSummary.mockClear();
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+
+      fixture.componentInstance.onTimePeriodChange({
+        target: { value: 'custom' },
+      } as unknown as Event);
+
+      const call = pnlServiceMock.getSummary.mock.calls[0][0];
+      expect(call).not.toHaveProperty('closed_after');
+      expect(call).not.toHaveProperty('closed_before');
     });
 
-    it('18. formatPeriodLabel with year="2025" returns "2025"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+    it('23. card header shows ticker symbol', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
-      expect(fixture.componentInstance.formatPeriodLabel('2025', 'year', 'period')).toBe('2025');
+      const label = fixture.debugElement.query(By.css('[data-testid="pnl-card-label"]'));
+      expect(label.nativeElement.textContent.trim()).toBe('SPX');
     });
   });
 
-  // ── 6. Underlying filter ──────────────────────────────────────────────────────
+  // ── 5. Underlying filter ──────────────────────────────────────────────────────
 
   describe('underlying filter', () => {
-    it('19. typing underlying calls getSummary with underlying param', () => {
+    it('24. typing underlying calls getSummary with underlying param', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -293,7 +349,7 @@ describe('PnlSummaryComponent', () => {
       );
     });
 
-    it('20. clearing underlying omits the param from getSummary call', () => {
+    it('25. clearing underlying omits the param from getSummary call', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -308,10 +364,10 @@ describe('PnlSummaryComponent', () => {
     });
   });
 
-  // ── 7. P&L colouring ─────────────────────────────────────────────────────────
+  // ── 6. P&L colouring ─────────────────────────────────────────────────────────
 
   describe('P&L card colouring', () => {
-    it('21. positive total_pnl has pnl-positive class', () => {
+    it('26. positive total_pnl has pnl-positive class', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026', '500.00')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -319,7 +375,7 @@ describe('PnlSummaryComponent', () => {
       expect(total.nativeElement.classList).toContain('pnl-positive');
     });
 
-    it('22. negative total_pnl has pnl-negative class', () => {
+    it('27. negative total_pnl has pnl-negative class', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026', '-200.00')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -327,7 +383,7 @@ describe('PnlSummaryComponent', () => {
       expect(total.nativeElement.classList).toContain('pnl-negative');
     });
 
-    it('23. zero total_pnl has no special pnl class', () => {
+    it('28. zero total_pnl has no special pnl class', () => {
       pnlServiceMock.getSummary.mockReturnValue(
         of(makeSummary([makeEntry('2026', '0.00', '0.00', '0.00')])),
       );
@@ -338,7 +394,7 @@ describe('PnlSummaryComponent', () => {
       expect(total.nativeElement.classList).not.toContain('pnl-negative');
     });
 
-    it('24. total-pnl headline has pnl-positive class when positive', () => {
+    it('29. total-pnl headline has pnl-positive class when positive', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026', '500.00')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -346,14 +402,14 @@ describe('PnlSummaryComponent', () => {
       expect(total.nativeElement.classList).toContain('pnl-positive');
     });
 
-    it('25. pnlClass returns empty string for zero', () => {
+    it('30. pnlClass returns empty string for zero', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
       expect(fixture.componentInstance.pnlClass('0.00')).toBe('');
     });
 
-    it('25b. options and equity pnl values have correct classes', () => {
+    it('30b. options and equity pnl values have correct classes', () => {
       pnlServiceMock.getSummary.mockReturnValue(
         of(makeSummary([makeEntry('2026', '750.00', '1000.00', '-250.00')])),
       );
@@ -366,183 +422,17 @@ describe('PnlSummaryComponent', () => {
     });
   });
 
-  // ── 8. Group-by toggle ────────────────────────────────────────────────────────
-
-  describe('group-by toggle', () => {
-    it('26. groupBy signal defaults to "period"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.groupBy()).toBe('period');
-    });
-
-    it('27. setGroupBy("underlying") calls getSummary with group_by=underlying', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      pnlServiceMock.getSummary.mockClear();
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([], 'year', 'underlying')));
-
-      fixture.componentInstance.setGroupBy('underlying');
-      expect(pnlServiceMock.getSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ group_by: 'underlying' }),
-      );
-    });
-
-    it('29. loadSummary sends group_by param from signal', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      pnlServiceMock.getSummary.mockClear();
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([], 'year', 'underlying')));
-
-      fixture.componentInstance.groupBy.set('underlying');
-      fixture.componentInstance.loadSummary();
-      expect(pnlServiceMock.getSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ group_by: 'underlying' }),
-      );
-    });
-
-    it('30. underlying filter still works with group_by=underlying', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      fixture.componentInstance.setGroupBy('underlying');
-      pnlServiceMock.getSummary.mockClear();
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-
-      fixture.componentInstance.onUnderlyingChange(mockInputEvent('SPX'));
-      expect(pnlServiceMock.getSummary).toHaveBeenCalledWith(
-        expect.objectContaining({ group_by: 'underlying', underlying: 'SPX' }),
-      );
-    });
-  });
-
-  // ── 9. firstColumnHeader computed ────────────────────────────────────────────
-
-  describe('firstColumnHeader()', () => {
-    it('31. returns "Period" when groupBy is "period"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.firstColumnHeader()).toBe('Period');
-    });
-
-    it('32. returns "Underlying" when groupBy is "underlying"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      fixture.componentInstance.groupBy.set('underlying');
-      expect(fixture.componentInstance.firstColumnHeader()).toBe('Underlying');
-    });
-  });
-
-  // ── 10. formatPeriodLabel with groupBy ────────────────────────────────────────
-
-  describe('formatPeriodLabel() with groupBy', () => {
-    it('34. returns label as-is when groupBy is "underlying"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.formatPeriodLabel('SPX', 'month', 'underlying')).toBe('SPX');
-    });
-  });
-
-  // ── 11. periodDisabled computed ───────────────────────────────────────────────
-
-  describe('periodDisabled()', () => {
-    it('36. is false by default (groupBy=period)', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      expect(fixture.componentInstance.periodDisabled()).toBe(false);
-    });
-
-    it('37. is true when groupBy is "underlying"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      fixture.componentInstance.groupBy.set('underlying');
-      expect(fixture.componentInstance.periodDisabled()).toBe(true);
-    });
-  });
-
-  // ── 12. Group-by DOM / HTML ───────────────────────────────────────────────────
-
-  describe('group-by toggle DOM', () => {
-    it('39. group-by-toggle container is rendered', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      expect(fixture.debugElement.query(By.css('[data-testid="group-by-toggle"]'))).not.toBeNull();
-    });
-
-    it('40. group-by-period radio is checked by default', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      const radio: HTMLInputElement = fixture.debugElement.query(
-        By.css('[data-testid="group-by-period"]'),
-      ).nativeElement;
-      expect(radio.checked).toBe(true);
-    });
-
-    it('41. period toggle radios are disabled when groupBy is "underlying"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-      fixture.componentInstance.groupBy.set('underlying');
-      fixture.detectChanges();
-      const yearRadio: HTMLInputElement = fixture.debugElement.query(
-        By.css('[data-testid="period-year"]'),
-      ).nativeElement;
-      const monthRadio: HTMLInputElement = fixture.debugElement.query(
-        By.css('[data-testid="period-month"]'),
-      ).nativeElement;
-      expect(yearRadio.disabled).toBe(true);
-      expect(monthRadio.disabled).toBe(true);
-    });
-
-    it('42. period toggle re-enabled after switching from "underlying" back to "period"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-
-      fixture.componentInstance.groupBy.set('underlying');
-      fixture.detectChanges();
-      fixture.componentInstance.setGroupBy('period');
-      fixture.detectChanges();
-
-      const yearRadio: HTMLInputElement = fixture.debugElement.query(
-        By.css('[data-testid="period-year"]'),
-      ).nativeElement;
-      expect(yearRadio.disabled).toBe(false);
-    });
-
-    it('43. card header shows "Underlying" label when groupBy is "underlying"', () => {
-      pnlServiceMock.getSummary.mockReturnValue(
-        of(makeSummary([makeEntry('SPX')], 'year', 'underlying')),
-      );
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.componentInstance.groupBy.set('underlying');
-      fixture.detectChanges();
-      const label = fixture.debugElement.query(By.css('[data-testid="pnl-card-label"]'));
-      expect(label.nativeElement.textContent).toContain('Underlying');
-      expect(label.nativeElement.textContent).toContain('SPX');
-    });
-  });
-
-  // ── 13. Card structure ────────────────────────────────────────────────────────
+  // ── 7. Card structure ─────────────────────────────────────────────────────────
 
   describe('card layout structure', () => {
-    it('44. pnl-cards container is rendered when data exists', () => {
+    it('31. pnl-cards container is rendered when data exists', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
       expect(fixture.debugElement.query(By.css('[data-testid="pnl-cards"]'))).not.toBeNull();
     });
 
-    it('45. each card has options, equity, and total metrics', () => {
+    it('32. each card has options, equity, and total metrics', () => {
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026', '500.00')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
@@ -552,83 +442,114 @@ describe('PnlSummaryComponent', () => {
       expect(card.query(By.css('[data-testid="pnl-card-total"]'))).not.toBeNull();
     });
 
-    it('46. card label shows period header text', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('33. card label shows ticker without "Underlying" prefix', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
       const label = fixture.debugElement.query(By.css('[data-testid="pnl-card-label"]'));
-      expect(label.nativeElement.textContent).toContain('Period');
-      expect(label.nativeElement.textContent).toContain('2026');
+      expect(label.nativeElement.textContent.trim()).toBe('SPX');
     });
   });
 
-  // ── 14. Card expansion ────────────────────────────────────────────────────────
+  // ── 8. Card expansion ─────────────────────────────────────────────────────────
 
   describe('card expansion', () => {
-    it('47. toggleCard sets expandedLabel and calls getPositionsForBucket', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('34. toggleCard sets expandedLabel and calls getPositionsForBucket', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
 
-      expect(fixture.componentInstance.expandedLabel()).toBe('2026');
+      expect(fixture.componentInstance.expandedLabel()).toBe('SPX');
       expect(pnlServiceMock.getPositionsForBucket).toHaveBeenCalledWith(
-        expect.objectContaining({ period_label: '2026', period: 'year', group_by: 'period' }),
+        expect.objectContaining({ period_label: 'SPX', group_by: 'underlying' }),
       );
     });
 
-    it('48. toggleCard same label collapses card (expandedLabel becomes null)', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('35. toggleCard same label collapses card (expandedLabel becomes null)', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
+      fixture.componentInstance.toggleCard('SPX');
 
       expect(fixture.componentInstance.expandedLabel()).toBeNull();
       expect(fixture.componentInstance.bucketPositions()).toBeNull();
     });
 
-    it('49. toggleCard different label switches expansion', () => {
+    it('36. toggleCard different label switches expansion', () => {
       pnlServiceMock.getSummary.mockReturnValue(
-        of(makeSummary([makeEntry('2025'), makeEntry('2026')])),
+        of(makeSummary([makeEntry('NVDA'), makeEntry('SPX')])),
       );
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2025');
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('NVDA');
+      fixture.componentInstance.toggleCard('SPX');
 
-      expect(fixture.componentInstance.expandedLabel()).toBe('2026');
+      expect(fixture.componentInstance.expandedLabel()).toBe('SPX');
     });
 
-    it('50. bucket-loading shows when positions are loading', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('37. loadBucketPositions includes date-range params from selected time period', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
+      pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+
+      fixture.componentInstance.toggleCard('SPX');
+
+      const year = new Date().getFullYear();
+      expect(pnlServiceMock.getPositionsForBucket).toHaveBeenCalledWith(
+        expect.objectContaining({
+          closed_after: `${year}-01-01`,
+          closed_before: `${year}-12-31`,
+        }),
+      );
+    });
+
+    it('37b. loadBucketPositions omits date params when Custom period is selected', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
+      pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+
+      // Switch to Custom (no dates)
+      fixture.componentInstance.selectedTimePeriod.set('custom');
+      fixture.componentInstance.toggleCard('SPX');
+
+      const call = pnlServiceMock.getPositionsForBucket.mock.calls[0][0];
+      expect(call).not.toHaveProperty('closed_after');
+      expect(call).not.toHaveProperty('closed_before');
+    });
+
+    it('38. bucket-loading shows when positions are loading', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       const subject = new Subject<PositionListResponse>();
       pnlServiceMock.getPositionsForBucket.mockReturnValue(subject.asObservable());
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       expect(fixture.debugElement.query(By.css('[data-testid="bucket-loading"]'))).not.toBeNull();
       subject.complete();
     });
 
-    it('51. bucket-error shows on fetch failure with retry button', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('39. bucket-error shows on fetch failure with retry button', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         throwError(() => ({ message: 'Network error' })),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       const errorEl = fixture.debugElement.query(By.css('[data-testid="bucket-error"]'));
@@ -637,13 +558,13 @@ describe('PnlSummaryComponent', () => {
       expect(fixture.debugElement.query(By.css('[data-testid="bucket-retry-btn"]'))).not.toBeNull();
     });
 
-    it('52. retry button calls loadBucketPositions again', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('40. retry button calls loadBucketPositions again', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(throwError(() => ({ message: 'err' })));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       pnlServiceMock.getPositionsForBucket.mockClear();
@@ -652,20 +573,20 @@ describe('PnlSummaryComponent', () => {
       expect(pnlServiceMock.getPositionsForBucket).toHaveBeenCalledTimes(1);
     });
 
-    it('53. bucket-empty shows when no positions returned', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('41. bucket-empty shows when no positions returned', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       expect(fixture.debugElement.query(By.css('[data-testid="bucket-empty"]'))).not.toBeNull();
     });
 
-    it('54. options positions table renders with correct row count', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('42. options positions table renders with correct row count', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(
           makeBucketResponse([makeOptionsPosition('pos-1'), makeOptionsPosition('pos-2', 'NVDA')]),
@@ -674,7 +595,7 @@ describe('PnlSummaryComponent', () => {
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       expect(
@@ -685,45 +606,45 @@ describe('PnlSummaryComponent', () => {
       );
     });
 
-    it('55. position P&L value has correct pnl class for positive value', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('43. position P&L value has correct pnl class for positive value', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(makeBucketResponse([makeOptionsPosition('pos-1', 'SPX', '500.00')])),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       const pnlCell = fixture.debugElement.query(By.css('[data-testid="bucket-pos-pnl"]'));
       expect(pnlCell.nativeElement.classList).toContain('pnl-positive');
     });
 
-    it('56. position P&L value has correct pnl class for negative value', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('44. position P&L value has correct pnl class for negative value', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(makeBucketResponse([makeOptionsPosition('pos-1', 'SPX', '-200.00')])),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       const pnlCell = fixture.debugElement.query(By.css('[data-testid="bucket-pos-pnl"]'));
       expect(pnlCell.nativeElement.classList).toContain('pnl-negative');
     });
 
-    it('57. Legs button toggles position drawer open', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('45. Legs button toggles position drawer open', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(makeBucketResponse([makeOptionsPosition('pos-1')])),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       expect(fixture.componentInstance.isPositionExpanded('pos-1')).toBe(false);
@@ -731,15 +652,15 @@ describe('PnlSummaryComponent', () => {
       expect(fixture.componentInstance.isPositionExpanded('pos-1')).toBe(true);
     });
 
-    it('57b. Legs button toggles position drawer closed when already open', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('45b. Legs button toggles position drawer closed when already open', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(makeBucketResponse([makeOptionsPosition('pos-1')])),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       fixture.componentInstance.togglePositionDrawer('pos-1');
@@ -748,15 +669,15 @@ describe('PnlSummaryComponent', () => {
       expect(fixture.componentInstance.isPositionExpanded('pos-1')).toBe(false);
     });
 
-    it('58. position-drawer appears in DOM when position is expanded', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('46. position-drawer appears in DOM when position is expanded', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(
         of(makeBucketResponse([makeOptionsPosition('pos-1')])),
       );
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       fixture.debugElement.query(By.css('[data-testid="bucket-expand-btn"]')).nativeElement.click();
@@ -766,53 +687,39 @@ describe('PnlSummaryComponent', () => {
     });
   });
 
-  // ── 15. State reset on filter changes ────────────────────────────────────────
+  // ── 9. State reset on filter changes ─────────────────────────────────────────
 
   describe('state reset on filter changes', () => {
-    it('59. expansion resets when setPeriod is called', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('47. expansion resets when time period changes', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
-      expect(fixture.componentInstance.expandedLabel()).toBe('2026');
+      fixture.componentInstance.toggleCard('SPX');
+      expect(fixture.componentInstance.expandedLabel()).toBe('SPX');
 
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([], 'month')));
-      fixture.componentInstance.setPeriod('month');
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      fixture.componentInstance.onTimePeriodChange({
+        target: { value: 'last-30' },
+      } as unknown as Event);
 
       expect(fixture.componentInstance.expandedLabel()).toBeNull();
       expect(fixture.componentInstance.bucketPositions()).toBeNull();
     });
 
-    it('60. expansion resets when setGroupBy is called', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('48. expansion resets when underlying filter changes', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
-      expect(fixture.componentInstance.expandedLabel()).toBe('2026');
-
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([], 'year', 'underlying')));
-      fixture.componentInstance.setGroupBy('underlying');
-
-      expect(fixture.componentInstance.expandedLabel()).toBeNull();
-      expect(fixture.componentInstance.bucketPositions()).toBeNull();
-    });
-
-    it('61. expansion resets when underlying filter changes', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
-      pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
-      const fixture = TestBed.createComponent(PnlSummaryComponent);
-      fixture.detectChanges();
-
-      fixture.componentInstance.toggleCard('2026');
-      expect(fixture.componentInstance.expandedLabel()).toBe('2026');
+      fixture.componentInstance.toggleCard('SPX');
+      expect(fixture.componentInstance.expandedLabel()).toBe('SPX');
 
       pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
       fixture.componentInstance.onUnderlyingChange({
-        target: { value: 'SPX' },
+        target: { value: 'NVDA' },
       } as unknown as Event);
 
       expect(fixture.componentInstance.expandedLabel()).toBeNull();
@@ -820,24 +727,24 @@ describe('PnlSummaryComponent', () => {
     });
   });
 
-  // ── 16. Expanded card DOM ─────────────────────────────────────────────────────
+  // ── 10. Expanded card DOM ─────────────────────────────────────────────────────
 
   describe('expanded card DOM', () => {
-    it('62. expanded card has pnl-card--expanded class', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('49. expanded card has pnl-card--expanded class', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
       fixture.detectChanges();
 
       const card = fixture.debugElement.query(By.css('[data-testid="pnl-card"]'));
       expect(card.nativeElement.classList).toContain('pnl-card--expanded');
     });
 
-    it('63. expand indicator button shows in card header', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('50. expand indicator button shows in card header', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
@@ -846,29 +753,232 @@ describe('PnlSummaryComponent', () => {
       ).not.toBeNull();
     });
 
-    it('64. bucketError uses fallback message when error has no message', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('51. bucketError uses fallback message when error has no message', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(throwError(() => ({})));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
 
       expect(fixture.componentInstance.bucketError()).toBe('Failed to load positions.');
     });
 
-    it('65. getPositionsForBucket includes underlying when underlying signal is set', () => {
-      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('2026')])));
+    it('52. getPositionsForBucket includes underlying when underlying signal is set', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
       pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse()));
       const fixture = TestBed.createComponent(PnlSummaryComponent);
       fixture.detectChanges();
 
       fixture.componentInstance.underlying.set('SPX');
-      fixture.componentInstance.toggleCard('2026');
+      fixture.componentInstance.toggleCard('SPX');
 
       expect(pnlServiceMock.getPositionsForBucket).toHaveBeenCalledWith(
         expect.objectContaining({ underlying: 'SPX' }),
       );
+    });
+  });
+
+  // ── 11. daysHeld / daysToExpiry / isClosed helpers ───────────────────────────
+
+  describe('daysHeld()', () => {
+    it('53. returns correct number of days for a closed position', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      const comp = fixture.componentInstance;
+      expect(comp.daysHeld({ opened_at: '2026-01-01', closed_at: '2026-01-20' })).toBe(19);
+    });
+
+    it('54. returns null when opened_at is null', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.componentInstance.daysHeld({ opened_at: null, closed_at: '2026-01-20' }),
+      ).toBeNull();
+    });
+
+    it('55. returns null when closed_at is null', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(
+        fixture.componentInstance.daysHeld({ opened_at: '2026-01-01', closed_at: null }),
+      ).toBeNull();
+    });
+  });
+
+  describe('daysToExpiry()', () => {
+    it('56. returns a number for a future expiry', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      const futureExpiry = '2099-12-31';
+      const result = fixture.componentInstance.daysToExpiry(futureExpiry);
+      expect(result).not.toBeNull();
+      expect(result!).toBeGreaterThan(0);
+    });
+
+    it('57. returns null for empty expiry string', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.daysToExpiry('')).toBeNull();
+    });
+  });
+
+  describe('isClosed()', () => {
+    it('58. returns true for CLOSED', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('CLOSED')).toBe(true);
+    });
+
+    it('59. returns true for EXPIRED', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('EXPIRED')).toBe(true);
+    });
+
+    it('60. returns true for ASSIGNED', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('ASSIGNED')).toBe(true);
+    });
+
+    it('61. returns true for EXERCISED', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('EXERCISED')).toBe(true);
+    });
+
+    it('62. returns false for OPEN', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('OPEN')).toBe(false);
+    });
+
+    it('63. returns false for PARTIALLY_CLOSED', () => {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary()));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      expect(fixture.componentInstance.isClosed('PARTIALLY_CLOSED')).toBe(false);
+    });
+  });
+
+  // ── 12. Bucket table date/DTE/held columns ────────────────────────────────────
+
+  describe('bucket table date columns', () => {
+    function setupExpandedBucket(pos: PositionListResponse['options_items'][0]) {
+      pnlServiceMock.getSummary.mockReturnValue(of(makeSummary([makeEntry('SPX')])));
+      pnlServiceMock.getPositionsForBucket.mockReturnValue(of(makeBucketResponse([pos])));
+      const fixture = TestBed.createComponent(PnlSummaryComponent);
+      fixture.detectChanges();
+      fixture.componentInstance.toggleCard('SPX');
+      fixture.detectChanges();
+      return fixture;
+    }
+
+    it('64. bucket table shows Opened column header', () => {
+      const fixture = setupExpandedBucket(makeOptionsPosition());
+      const headers = fixture.debugElement
+        .query(By.css('[data-testid="bucket-options-table"]'))
+        .queryAll(By.css('th'));
+      const headerTexts = headers.map((h) => h.nativeElement.textContent.trim());
+      expect(headerTexts).toContain('Opened');
+    });
+
+    it('65. bucket table shows Closed / DTE column header', () => {
+      const fixture = setupExpandedBucket(makeOptionsPosition());
+      const headers = fixture.debugElement
+        .query(By.css('[data-testid="bucket-options-table"]'))
+        .queryAll(By.css('th'));
+      const headerTexts = headers.map((h) => h.nativeElement.textContent.trim());
+      expect(headerTexts).toContain('Closed / DTE');
+    });
+
+    it('66. bucket table shows Held column header', () => {
+      const fixture = setupExpandedBucket(makeOptionsPosition());
+      const headers = fixture.debugElement
+        .query(By.css('[data-testid="bucket-options-table"]'))
+        .queryAll(By.css('th'));
+      const headerTexts = headers.map((h) => h.nativeElement.textContent.trim());
+      expect(headerTexts).toContain('Held');
+    });
+
+    it('67. closed position row shows opened_at date formatted', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        status: 'CLOSED',
+        opened_at: '2026-01-01',
+        closed_at: '2026-01-20',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      expect(row.nativeElement.textContent).toContain('Jan 1, 2026');
+    });
+
+    it('68. closed position row shows closed_at date in Closed/DTE column', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        status: 'CLOSED',
+        opened_at: '2026-01-01',
+        closed_at: '2026-01-20',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      expect(row.nativeElement.textContent).toContain('Jan 20, 2026');
+    });
+
+    it('69. closed position row shows days held', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        status: 'CLOSED',
+        opened_at: '2026-01-01',
+        closed_at: '2026-01-20',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      expect(row.nativeElement.textContent).toContain('19d');
+    });
+
+    it('70. open position row shows days to expiry in Closed/DTE column', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        status: 'OPEN',
+        opened_at: '2026-01-01',
+        closed_at: null,
+        expiry: '2099-12-31',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      expect(row.nativeElement.textContent).toMatch(/\d+d/);
+    });
+
+    it('71. open position row shows em dash in Held column', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        status: 'OPEN',
+        opened_at: '2026-01-01',
+        closed_at: null,
+        expiry: '2099-12-31',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      expect(row.nativeElement.textContent).toContain('—');
+    });
+
+    it('72. null opened_at shows empty Opened cell', () => {
+      const pos = makeOptionsPosition('pos-1', 'SPX', '100', {
+        opened_at: null,
+        closed_at: null,
+        status: 'OPEN',
+      });
+      const fixture = setupExpandedBucket(pos);
+      const row = fixture.debugElement.query(By.css('[data-testid="bucket-pos-row"]'));
+      // opened_at null → DatePipe returns empty string, Held shows —
+      expect(row.nativeElement.textContent).toContain('—');
     });
   });
 });

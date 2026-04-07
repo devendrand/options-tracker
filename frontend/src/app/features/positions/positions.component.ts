@@ -6,6 +6,7 @@ import {
   inject,
   signal,
 } from '@angular/core';
+import { DatePipe } from '@angular/common';
 import {
   OptionsPosition,
   OptionsPositionStatus,
@@ -29,7 +30,7 @@ export const POSITION_STATUSES: OptionsPositionStatus[] = [
   templateUrl: './positions.component.html',
   styleUrl: './positions.component.scss',
   changeDetection: ChangeDetectionStrategy.OnPush,
-  imports: [StatusBadgeComponent, PositionDrawerComponent],
+  imports: [StatusBadgeComponent, PositionDrawerComponent, DatePipe],
 })
 export class PositionsComponent implements OnInit {
   private readonly positionService = inject(PositionService);
@@ -132,5 +133,24 @@ export class PositionsComponent implements OnInit {
     this.limit.set(Number((event.target as HTMLSelectElement).value));
     this.offset.set(0);
     this.loadPositions();
+  }
+
+  daysHeld(pos: { opened_at: string | null; closed_at: string | null }): number | null {
+    if (!pos.opened_at || !pos.closed_at) return null;
+    const open = new Date(pos.opened_at + 'T00:00:00');
+    const close = new Date(pos.closed_at + 'T00:00:00');
+    return Math.round((close.getTime() - open.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  daysToExpiry(expiry: string): number | null {
+    if (!expiry) return null;
+    const exp = new Date(expiry + 'T00:00:00');
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    return Math.ceil((exp.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+  }
+
+  isClosed(status: string): boolean {
+    return ['CLOSED', 'EXPIRED', 'ASSIGNED', 'EXERCISED'].includes(status);
   }
 }

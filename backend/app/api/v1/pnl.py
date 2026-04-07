@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import date as date_type
 from typing import Literal
 
 from fastapi import APIRouter, Depends, Query
@@ -32,6 +33,8 @@ async def get_pnl_positions(
     type: _PnlType = Query(default="all"),
     offset: int = Query(default=0, ge=0),
     limit: int = Query(default=100, ge=1, le=500),
+    closed_after: date_type | None = Query(default=None),
+    closed_before: date_type | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PositionListResponse:
     """Return positions that contribute to a specific P&L bucket.
@@ -39,6 +42,9 @@ async def get_pnl_positions(
     The ``period_label`` parameter is required and identifies which bucket
     to drill into — either a period string (``'2026'``, ``'2026-03'``) when
     ``group_by='period'``, or a ticker symbol when ``group_by='underlying'``.
+
+    ``closed_after`` and ``closed_before`` are optional inclusive date filters
+    applied to the position close date.
     """
     repo = PnlRepository(db)
     opts_total, opts_rows, eq_total, eq_rows = await repo.get_positions_for_bucket(
@@ -49,12 +55,21 @@ async def get_pnl_positions(
         pnl_type=type,
         offset=offset,
         limit=limit,
+        closed_after=closed_after,
+        closed_before=closed_before,
     )
+    options_items: list[OptionsPositionResponse] = []
+    for pos, opened_at, closed_at in opts_rows:
+        resp = OptionsPositionResponse.model_validate(pos)
+        resp.opened_at = opened_at
+        resp.closed_at = closed_at
+        options_items.append(resp)
+
     return PositionListResponse(
         total=opts_total + eq_total,
         offset=offset,
         limit=limit,
-        options_items=[OptionsPositionResponse.model_validate(p) for p in opts_rows],
+        options_items=options_items,
         equity_items=[EquityPositionResponse.model_validate(p) for p in eq_rows],
     )
 
@@ -65,14 +80,22 @@ async def get_pnl_summary(
     type: _PnlType = Query(default="all"),
     underlying: str | None = Query(default=None),
     group_by: _GroupBy = Query(default="period"),
+    closed_after: date_type | None = Query(default=None),
+    closed_before: date_type | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
 ) -> PnlSummaryResponse:
-    """Return realized P&L aggregated by period (month or year)."""
+    """Return realized P&L aggregated by period (month or year).
+
+    ``closed_after`` and ``closed_before`` are optional inclusive date filters
+    applied to the position close date.
+    """
     repo = PnlRepository(db)
     items = await repo.get_pnl_summary(
         period=period,
         pnl_type=type,
         underlying=underlying,
         group_by=group_by,
+        closed_after=closed_after,
+        closed_before=closed_before,
     )
     return PnlSummaryResponse(period=period, group_by=group_by, items=items)

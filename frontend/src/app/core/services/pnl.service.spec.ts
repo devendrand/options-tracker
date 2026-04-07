@@ -144,6 +144,39 @@ describe('PnlService', () => {
       expect(req.request.params.has('group_by')).toBe(false);
       req.flush(mockPnlSummary);
     });
+
+    it('should serialize closed_after param', (done) => {
+      service.getSummary({ closed_after: '2026-01-01' }).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.get('closed_after')).toBe('2026-01-01');
+      req.flush(mockPnlSummary);
+    });
+
+    it('should serialize closed_before param', (done) => {
+      service.getSummary({ closed_before: '2026-12-31' }).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.get('closed_before')).toBe('2026-12-31');
+      req.flush(mockPnlSummary);
+    });
+
+    it('should omit closed_after when undefined', (done) => {
+      service.getSummary({ period: 'year' }).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/summary');
+      expect(req.request.params.has('closed_after')).toBe(false);
+      req.flush(mockPnlSummary);
+    });
   });
 
   describe('getPositionsForBucket()', () => {
@@ -223,6 +256,26 @@ describe('PnlService', () => {
 
       const req = controller.expectOne((r) => r.url === '/api/v1/pnl/positions');
       expect(req.request.params.has('underlying')).toBe(false);
+      req.flush(mockPositionListResponse);
+    });
+
+    it('should serialize closed_after and closed_before params', (done) => {
+      const params: PnlPositionsParams = {
+        period: 'year',
+        group_by: 'underlying',
+        period_label: 'SPX',
+        closed_after: '2026-01-01',
+        closed_before: '2026-12-31',
+      };
+
+      service.getPositionsForBucket(params).subscribe({
+        next: () => done(),
+        error: done.fail,
+      });
+
+      const req = controller.expectOne((r) => r.url === '/api/v1/pnl/positions');
+      expect(req.request.params.get('closed_after')).toBe('2026-01-01');
+      expect(req.request.params.get('closed_before')).toBe('2026-12-31');
       req.flush(mockPositionListResponse);
     });
   });
